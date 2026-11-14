@@ -1,0 +1,47 @@
+Autoridade intermediária do webhook Pix da Efí, ambiente de homologação: webhook-h.efipay.com.br.
+Tirada de https://certificados.efipay.com.br/webhooks/certificate-chain-homolog.crt, que traz também a raiz
+Efi Pay Root CA. A raiz fica de fora de propósito: as cadeias de produção e de homologação
+terminam nela, e confiar nela aceitaria qualquer certificado emitido abaixo dela. Só o
+certificado que esta intermediária emitiu passa no domínio do aviso.
+
+# subject=C=BR, ST=Minas Gerais, O=Efi S.A. - Instituicao de Pagamento, OU=Infraestrutura, CN=webhook-h.efipay.com.br, emailAddress=infra@sejaefi.com.br
+# notAfter=May 22 15:05:33 2033 GMT
+# sha256 Fingerprint=98:C4:42:20:CC:CC:93:0A:37:98:5E:35:19:A5:3D:EF:4B:BB:D8:B3:82:D7:F1:63:35:42:51:25:F7:18:EA:D5
+
+-----BEGIN CERTIFICATE-----
+MIIGcjCCBFqgAwIBAgIBAzANBgkqhkiG9w0BAQ0FADCBvzELMAkGA1UEBhMCQlIx
+FTATBgNVBAgMDE1pbmFzIEdlcmFpczETMBEGA1UEBwwKT3VybyBQcmV0bzEsMCoG
+A1UECgwjRWZpIFMuQS4gLSBJbnN0aXR1aWNhbyBkZSBQYWdhbWVudG8xFzAVBgNV
+BAsMDkluZnJhZXN0cnV0dXJhMRgwFgYDVQQDDA9FZmkgUGF5IFJvb3QgQ0ExIzAh
+BgkqhkiG9w0BCQEWFGluZnJhQHNlamFlZmkuY29tLmJyMB4XDTIzMDUyNTE1MDUz
+M1oXDTMzMDUyMjE1MDUzM1owgbIxCzAJBgNVBAYTAkJSMRUwEwYDVQQIDAxNaW5h
+cyBHZXJhaXMxLDAqBgNVBAoMI0VmaSBTLkEuIC0gSW5zdGl0dWljYW8gZGUgUGFn
+YW1lbnRvMRcwFQYDVQQLDA5JbmZyYWVzdHJ1dHVyYTEgMB4GA1UEAwwXd2ViaG9v
+ay1oLmVmaXBheS5jb20uYnIxIzAhBgkqhkiG9w0BCQEWFGluZnJhQHNlamFlZmku
+Y29tLmJyMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA85wjw2qpcGpc
+UKmsjIaeEmA7RIFKIXEkWLNhqyEVWqHziC2I+5+Gz3yXJWtDoICEyRRtxVTmONdF
+rV6H5sgJFQB9i6d/E1hit1cckwjePCQvcC1edbU2vQdMUQxUYr9Y+lZ1/nPV4jVV
+lw03GxdOMngymT/Eq4SyNL0B+mApc3lJBPITCQ1JalNgWbWk52zWREULZSVt26ro
+GA/xjX6c/vGal7XLoHX3XSgtEGkLldPis8BzXo8LUngoNrjtAULInnIGfZo+tZgN
+JFTODPmQhsMHKzUfTqTCvTfRDauZx3UvE+0ABU3hDLf4TnrSQKFAjkBXByl0ZUEk
+6EkKc0CzN0fsEiqr++0ygbd6qtockKLZrARlP218ETDlrpAVEdCAnYMZvYeBPkBP
+MIbtrKiAQBRAp4fvah7Fqgxs4aQUPSMn8yOKIB3nBWnyPdYhwhSCAQywStpTM31F
+bh5ebrb5BWL4082Du3gi+n+qEip2XD9ODjXTc697Y5g/uFAxW4NhUWspG4MYCv2Z
+Zg2PbnaJMrIgdVjFqd3ZsmiCy3yn0DMiAPGIzw8s7Gsoy/xT8Q+wQ0nExJL/Z114
+eX1eyp/46nekZudgchVbgmRsEz5zrEnyyLog9BEMokVVW3Cf35G82q4GJL+heCgO
+So0WVpDwIS1v2mo8ECk+CbUI8LBtn18CAwEAAaOBgzCBgDAdBgNVHQ4EFgQUzXuH
+rdksxNmuHaQMxSWgqlVuQeIwHwYDVR0jBBgwFoAUImKlwcg6/HtwxJd98uPYXYnZ
+x2gwEgYDVR0TAQH/BAgwBgEB/wIBADAOBgNVHQ8BAf8EBAMCAYYwGgYDVR0RBBMw
+EYIPKi5lZmlwYXkuY29tLmJyMA0GCSqGSIb3DQEBDQUAA4ICAQDR9IThxz8OzRK8
+nbeIIs3V+pspH8OPmcNv0GyROzWAv7jJiK9KjjBN6MhiocYdLC35HalsZH7E8xJB
+hs67xXdu9Bp3tAtSJKheXX+NXzwG9BiwDlmeqlbPlDdMnLhvLstuasm+KNw3Rtv9
+F8CzenDYxVSmhFabKtvP3glljyAU8BzPdZn63gLwBW9+TIjKfCvtSPwOXScpGiYL
+lrrh7AScSIsirr6/UMinldh6BPlMZnAN/2JnlKoLhFLsJTFVGamjBbFFej8vmcOU
+pMbbi1xd0JuOzZMvaSAsNJHRKylgg1iOvWLdJWlGLt+UfTs1gqo3JSO8qNg3DBFO
+MgMbBDm18zPdGls1t994iNUVcLx4GfmzzhvJgTwZE5EEIsNAx74FKrkJpdZ0pVyy
+pq2+oyTkSfsY9XX7qlyuOzssQ7cHJ4t33cyWRgsBFFlQuUtvNAQ9VWwXuHZ937W4
+m8HfI4WIi2m08hpkcPdz7gO7EaXwVIi+LbbLlRb69b7kg3ak6kN6z9EWyQ86nxu6
+q/guOrVxNS6n8hR6fG9i2B17kUKneu1Vna5MkU5AoL59oaZE7DzsWYPjxWc6o3cK
+pFfai1XWkj1mMBYQxP4lvtOBcdtVovC55xu4FrcBEsvNzyfy+xYsJhhp38lu+BnZ
+42C4hOMjaainL+mTUYUIMdwDDlZb7A==
+-----END CERTIFICATE-----

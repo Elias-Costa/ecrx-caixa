@@ -9,6 +9,7 @@ import br.com.caixasimples.shared.TenantContext;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -20,6 +21,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
+import java.util.regex.Pattern;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import org.springframework.stereotype.Component;
@@ -32,6 +34,7 @@ class EfiPixGateway implements PixGateway {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String PRODUCAO = "https://pix.api.efipay.com.br";
     private static final String HOMOLOGACAO = "https://pix-h.api.efipay.com.br";
+    private static final Pattern PARTE_DA_URL = Pattern.compile("[A-Za-z0-9_-]+");
 
     /** Lê as mesmas variáveis que a cobrança, sem abrir o certificado nem chamar a Efí. */
     @Override
@@ -111,6 +114,79 @@ class EfiPixGateway implements PixGateway {
         } catch (Exception erro) {
             throw new PixIndisponivelException("remocao Pix incerta", erro);
         }
+    }
+
+    /**
+     * Cadastra na Efí o webhook da chave Pix da Conta do contexto, apontando para o domínio só do
+     * aviso.
+     *
+     * <p>Fica fora da porta PixGateway: o cadastro com o segredo na URL é da Efí, e só a execução
+     * avulsa do mantenedor o chama. A Efí testa a URL antes de responder, então o domínio precisa
+     * estar no ar, com o proxy exigindo o certificado de cliente dela.
+     */
+    void cadastrarWebhook(String dominio) {
+        Configuracao config = configuracao();
+        String prefixo = prefixoDaConta();
+        String url = urlDoWebhook(dominio, obrigatoria(prefixo + "WEBHOOK_ID"),
+                obrigatoria(prefixo + "WEBHOOK_SECRET"));
+        try {
+            HttpClient http = cliente(config);
+            cadastrar(http, config.base(), token(http, config), config.chave(), url);
+        } catch (IllegalStateException | PixIndisponivelException erro) {
+            throw erro;
+        } catch (InterruptedException erro) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("O cadastro do webhook foi interrompido.", erro);
+        } catch (Exception erro) {
+            throw new IllegalStateException("O cadastro do webhook não teve resposta da Efí.", erro);
+        }
+    }
+
+    /**
+     * A URL que a Efí chama. O identificador e o segredo só têm letras, números, hífen e sublinhado,
+     * para irem como estão, sem codificação que a Efí e a rota pudessem ler de jeitos diferentes.
+     */
+    static String urlDoWebhook(String dominio, String identificador, String segredo) {
+        if (!PARTE_DA_URL.matcher(identificador).matches()
+                || !PARTE_DA_URL.matcher(segredo).matches()) {
+            throw new IllegalStateException("O identificador e o segredo do webhook da Conta só "
+                    + "podem ter letras, números, hífen e sublinhado.");
+        }
+        // A Efí acrescenta /pix ao fim da URL cadastrada, que cairia colado no segredo. Com o
+        // ignorar= por último, o /pix vira o valor desse parâmetro, que a rota não lê.
+        return "https://" + dominio + "/api/webhooks/pix/" + identificador + "?hmac=" + segredo
+                + "&ignorar=";
+    }
+
+    static void cadastrar(HttpClient http, String base, String token, String chave, String url)
+            throws Exception {
+        String caminho = "/v2/webhook/" + URLEncoder.encode(chave, StandardCharsets.UTF_8);
+        HttpResponse<String> resposta = enviar(http, base, "PUT", caminho, token,
+                JSON.writeValueAsString(Map.of("webhookUrl", url)));
+        if (resposta.statusCode() < 200 || resposta.statusCode() >= 300) {
+            throw new IllegalStateException("A Efí recusou o cadastro do webhook, com "
+                    + resposta.statusCode() + ": " + motivoDaRecusa(resposta.body()));
+        }
+    }
+
+    /**
+     * O nome e a mensagem do erro da Efí, que dizem o que falta: o mTLS, a URL fora do ar, a resposta
+     * de erro da rota. Nenhuma mensagem documentada repete a URL; se uma repetir, o segredo sai do
+     * texto antes de ir ao log.
+     */
+    static String motivoDaRecusa(String corpo) {
+        String motivo;
+        try {
+            JsonNode erro = JSON.readTree(corpo);
+            motivo = (erro.path("nome").asText("") + " " + erro.path("mensagem").asText("")).trim();
+        } catch (Exception ilegivel) {
+            motivo = "";
+        }
+        if (motivo.isEmpty()) {
+            return "sem detalhe legível";
+        }
+        motivo = motivo.replaceAll("hmac=[A-Za-z0-9_-]*", "hmac=(segredo)");
+        return motivo.length() <= 300 ? motivo : motivo.substring(0, 300);
     }
 
     static void remover(HttpClient http, String base, String token, CobrancaPix cobranca)
@@ -209,9 +285,13 @@ class EfiPixGateway implements PixGateway {
         return copiaECola;
     }
 
-    private static Configuracao configuracao() {
+    private static String prefixoDaConta() {
         String sufixo = TenantContext.exigirAtual().valor().toString().replace("-", "").toUpperCase();
-        String prefixo = "ECRX_CAIXA_EFI_" + sufixo + "_";
+        return "ECRX_CAIXA_EFI_" + sufixo + "_";
+    }
+
+    private static Configuracao configuracao() {
+        String prefixo = prefixoDaConta();
         String ambiente = System.getenv(prefixo + "AMBIENTE");
         if (!"HOMOLOGACAO".equals(ambiente) && !"PRODUCAO".equals(ambiente)) {
             throw new IllegalStateException("O Pix integrado não está configurado para esta Conta.");

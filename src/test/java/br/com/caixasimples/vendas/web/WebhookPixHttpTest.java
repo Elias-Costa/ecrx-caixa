@@ -33,7 +33,6 @@ import br.com.caixasimples.vendas.application.VendaPixService;
 import br.com.caixasimples.vendas.application.VendaService;
 import br.com.caixasimples.vendas.internal.VendaRepository;
 import java.math.BigDecimal;
-import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -54,9 +53,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Reconsulta, isolamento, reentrega e transição financeira da raiz. */
+/**
+ * Reconsulta, isolamento, reentrega e transição financeira da raiz.
+ *
+ * <p>O certificado de cliente da Efí é conferido pelo proxy, que escreve a impressão digital dele
+ * neste cabeçalho; o nome vai escrito por extenso porque é o mesmo do Caddyfile, e trocá-lo só aqui
+ * recusaria todo aviso real.
+ */
 @RecordApplicationEvents
 class WebhookPixHttpTest extends TesteDeIntegracao {
+    private static final String CERTIFICADO = "X-Ecrx-Caixa-Certificado-Efi";
+    private static final String IMPRESSAO_DIGITAL =
+            "8c0f3a1e5b2d4c6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f";
+
     @Autowired MockMvc http;
     @Autowired AutenticadorDeTeste autenticadorHttp;
     @Autowired CriadorDeContaDeTeste criador;
@@ -85,7 +94,7 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                 .contentType(MediaType.APPLICATION_JSON).content(aviso(a.txid())))
                 .andExpect(status().isForbidden());
         http.perform(post("/api/webhooks/pix/config-a?hmac=segredo-errado")
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_JSON).content(aviso(a.txid())))
                 .andExpect(status().isForbidden());
         http.perform(callback("config-b", "segredo-b", a.txid()))
@@ -230,18 +239,62 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                 .contentType(MediaType.APPLICATION_JSON).content("{"))
                 .andExpect(status().isForbidden());
         http.perform(post("/api/webhooks/pix/config-c?hmac=segredo-errado")
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_JSON).content("{"))
                 .andExpect(status().isForbidden());
 
         http.perform(post("/api/webhooks/pix/config-c?hmac=segredo-c")
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_JSON).content("{"))
                 .andExpect(status().isBadRequest());
-        http.perform(post("/api/webhooks/pix/config-c?hmac=segredo-c")
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
-                .contentType(MediaType.APPLICATION_JSON).content(""))
+        verify(gateway, never()).consultar(any());
+    }
+
+    /**
+     * Um cabeçalho vazio não é um certificado conferido: o proxy só o escreve depois de verificar o
+     * certificado, e a impressão digital nunca sai vazia.
+     */
+    @Test
+    void cabecalhoEmBrancoNaoContaComoCertificado() throws Exception {
+        ContaCriada conta = criador.criar("Webhook Branco", "uma senha longa de teste");
+        when(autenticador.autenticar("config-v", "segredo-v")).thenReturn(conta.contaId());
+
+        http.perform(post("/api/webhooks/pix/config-v?hmac=segredo-v")
+                .header(CERTIFICADO, "")
+                .contentType(MediaType.APPLICATION_JSON).content("{"))
+                .andExpect(status().isForbidden());
+        http.perform(post("/api/webhooks/pix/config-v?hmac=segredo-v")
+                .header(CERTIFICADO, "   ")
+                .contentType(MediaType.APPLICATION_JSON).content("{"))
+                .andExpect(status().isForbidden());
+        verify(autenticador, never()).autenticar(any(), any());
+    }
+
+    /**
+     * O cadastro na Efí só passa se a notificação de teste receber sucesso, e o corpo dela não é
+     * documentado. Autenticado e sem a lista pix, o aviso não tem cobrança a reconsultar.
+     */
+    @Test
+    void avisoAutenticadoSemListaPixResponde204SemReconsultar() throws Exception {
+        ContaCriada conta = criador.criar("Webhook Teste", "uma senha longa de teste");
+        when(autenticador.autenticar("config-t", "segredo-t")).thenReturn(conta.contaId());
+
+        for (String corpo : new String[]{"{}", "{\"evento\":\"teste_webhook\"}", ""}) {
+            http.perform(post("/api/webhooks/pix/config-t?hmac=segredo-t&ignorar=")
+                    .header(CERTIFICADO, IMPRESSAO_DIGITAL)
+                    .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                    .andExpect(status().isNoContent());
+        }
+        // A lista presente e malformada continua recusada.
+        http.perform(post("/api/webhooks/pix/config-t?hmac=segredo-t")
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"pix\":null}"))
                 .andExpect(status().isBadRequest());
+        // Sem o segredo certo, o mesmo corpo não chega a ser lido.
+        http.perform(post("/api/webhooks/pix/config-t?hmac=segredo-errado")
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
         verify(gateway, never()).consultar(any());
     }
 
@@ -264,7 +317,7 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                             requisicao.setRemoteAddr("203.0.113.91");
                             return requisicao;
                         })
-                        .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                        .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isForbidden());
 
@@ -282,7 +335,7 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
         when(autenticador.autenticar("config-f", "segredo-f")).thenReturn(conta.contaId());
 
         http.perform(post("/api/webhooks/pix/config-f")
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED).content("hmac=segredo-f"))
                 .andExpect(status().isUnsupportedMediaType());
         verify(autenticador, never()).autenticar(any(), any());
@@ -308,12 +361,8 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder callback(
             String id, String segredo, String txid) {
         return post("/api/webhooks/pix/{id}/pix?hmac={segredo}", id, segredo)
-                .secure(true).requestAttr("jakarta.servlet.request.X509Certificate", certificado())
+                .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_JSON).content(aviso(txid));
-    }
-
-    private static X509Certificate[] certificado() {
-        return new X509Certificate[]{org.mockito.Mockito.mock(X509Certificate.class)};
     }
 
     private static String aviso(String txid) {

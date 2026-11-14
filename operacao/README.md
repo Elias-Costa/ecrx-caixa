@@ -286,6 +286,7 @@ variáveis que o compose lista para ele.
 | Variável | De onde vem | Para quê |
 |---|---|---|
 | `ECRX_CAIXA_DOMINIO` | O domínio, com o registro A para a VPS | O site do proxy, o certificado e a conferência do vigia |
+| `ECRX_CAIXA_WEBHOOK_DOMINIO` | Um subdomínio só do aviso Pix, também com o registro A para a VPS | O site do proxy que exige o certificado de cliente da Efí, e a URL que o cadastro do webhook registra; ver [Webhook Pix](#webhook-pix). Vazio, o site fica num nome que só a máquina resolve |
 | `ECRX_CAIXA_DB_PASSWORD` | Gerada | A senha do papel `ecrx_caixa`, sem superusuário, para a aplicação, a cópia, a restauração e o encerramento; o banco a lê só no primeiro `initdb`, para criar o papel. Trocá-la depois exige trocá-la também dentro do banco; ver [Banco](#banco) |
 | `ECRX_CAIXA_DB_SUPERUSUARIO_PASSWORD` | Gerada | A senha do superusuário `postgres`, que só o contêiner do banco recebe, no primeiro `initdb`. Nenhum serviço conecta com ela |
 | `ECRX_CAIXA_JWT_SECRET` | Gerada | Assinatura dos tokens, com ao menos 32 bytes. Trocá-la obriga todo mundo a entrar de novo |
@@ -301,7 +302,9 @@ variáveis que o compose lista para ele.
 
 `/etc/ecrx-caixa/efi.env` guarda, para cada Conta que recebe pelo Pix integrado, com o UUID da
 Conta em maiúsculas e sem hífens, `ECRX_CAIXA_EFI_<UUID>_AMBIENTE`, `_CLIENT_ID`, `_CLIENT_SECRET`,
-`_CHAVE_PIX`, `_CERTIFICADO_P12`, `_CERTIFICADO_SENHA`, `_WEBHOOK_ID` e `_WEBHOOK_SECRET`. O
+`_CHAVE_PIX`, `_CERTIFICADO_P12`, `_CERTIFICADO_SENHA`, `_WEBHOOK_ID` e `_WEBHOOK_SECRET`. Os dois
+do webhook vão na URL que a Efí chama: só letras, números, hífen e sublinhado, um par por Conta, como
+os de `openssl rand -hex 16` e `openssl rand -hex 32`. O
 certificado `.p12` vai em `/etc/ecrx-caixa/efi/<uuid da Conta>.p12`, com dono 10001, e
 `_CERTIFICADO_P12` aponta para `/segredos/efi/<uuid da Conta>.p12`, onde a pasta aparece dentro da
 aplicação, só para leitura.
@@ -310,6 +313,45 @@ O Pix integrado faz parte do plano Completo: configure a Efí só para Conta nel
 aplicação recusa cobrança nova mesmo com a Efí configurada, e o aplicativo não mostra o Pix integrado;
 a cobrança já reservada ainda é consultada e confirmada. O Pix lançado à mão não depende da Efí: o
 administrador cadastra a chave Pix e a cidade em Configuração, e o aparelho mostra o QR estático.
+
+### Webhook Pix
+
+A Efí avisa o pagamento por um `POST` com o certificado de cliente dela. Quem o exige é o proxy, num
+subdomínio só do aviso, `ECRX_CAIXA_WEBHOOK_DOMINIO`: o domínio do aplicativo não pede certificado,
+porque o navegador do balcão abriria a escolha de um certificado instalado. O proxy confia só nas duas
+autoridades intermediárias do webhook da Efí, a de produção e a de homologação, em
+[`vps/efi/`](vps/efi), e não na raiz `Efi Pay Root CA`, que as duas compartilham: confiar nela
+aceitaria qualquer certificado emitido abaixo dela. Uma Conta de teste em homologação e uma real em
+produção convivem na máquina, e quem separa as Contas é o segredo da URL. Conferido o certificado, o
+proxy passa a impressão digital dele à aplicação no cabeçalho `X-Ecrx-Caixa-Certificado-Efi`; o site do
+aplicativo apaga esse cabeçalho, e a aplicação recusa o aviso sem ele, com `webhook.recusado
+motivo=sem_certificado`. O Host diferente do nome pedido no TLS recebe 421 do proxy. No subdomínio, o
+que não é `/api/webhooks/pix/` responde 404.
+
+Para ligar o aviso de uma Conta no plano Completo, com a Efí já em `efi.env`:
+
+1. No Registro.br, um registro A do subdomínio para o IP da VPS.
+2. `ECRX_CAIXA_WEBHOOK_DOMINIO=<subdomínio>` em `/etc/ecrx-caixa/ecrx-caixa.env`, e o proxy recriado
+   com `sh compose.sh up -d --wait proxy`, que pede o certificado do subdomínio.
+3. O cadastro na Efí, com o id da Conta, que não identifica ninguém fora do banco:
+
+```bash
+sh compose.sh --profile cadastrar-webhook-pix run --rm -e ECRX_CAIXA_WEBHOOK_CONTA=<id da Conta> cadastrar-webhook-pix
+```
+
+A execução lê a credencial, o certificado e o par do webhook da Conta em `efi.env`, monta
+`https://<subdomínio>/api/webhooks/pix/<_WEBHOOK_ID>?hmac=<_WEBHOOK_SECRET>&ignorar=` e faz o
+`PUT /v2/webhook/<chave Pix>` na Efí. Antes de aceitar, a Efí manda uma requisição sem certificado,
+que o proxy recusa, e depois uma notificação de teste com ele, que a aplicação responde com 204. Deu
+certo quando o log traz `evento=webhook.cadastrado conta=<id>`; a recusa da Efí sai na exceção, com o
+nome e a mensagem dela, como o mTLS não configurado ou a URL fora do ar. A URL não vai ao log. Rodar
+de novo substitui o cadastro pelo mesmo; trocar o segredo pede o cadastro de novo.
+
+**Troca das intermediárias.** As duas valem até 2033. Se a Efí trocar uma antes, o aperto de mão falha
+no proxy e o aviso não chega à aplicação nem deixa linha no log dela: a cobrança Pix fica PENDENTE no
+balcão, e a Efí tenta de novo por cerca de cinco horas. Nesse caso, baixe a cadeia nova de
+`https://certificados.efipay.com.br/webhooks/`, confira com `openssl x509 -noout -subject -issuer` qual
+certificado é a intermediária do webhook, ponha só ela no arquivo do ambiente, e recarregue o proxy.
 
 Uma mudança na configuração vale quando o contêiner é recriado: `sh compose.sh up -d --wait` recria só
 os que mudaram, e a troca da aplicação para o serviço, então vai na janela.
@@ -1460,6 +1502,20 @@ sh operacao/vps/compose.sh --profile seed --profile redefinir-senha --profile su
 
 No Git Bash do Windows, o `curl` do sistema confere a revogação do certificado, que a autoridade local
 do proxy não publica: use `--ssl-no-revoke` junto de `--cacert`.
+
+**O aviso Pix no ensaio.** O subdomínio do aviso fica no padrão, `webhook-pix.localhost`, na mesma porta
+18443, separado do aplicativo pelo nome pedido no TLS. Com as intermediárias reais, `openssl s_client
+-servername webhook-pix.localhost` lista as duas da Efí como autoridades aceitas, e o nome `localhost`
+não pede certificado nenhum. Para mandar um aviso com certificado, monte no proxy, por um arquivo por
+cima do ensaio, uma pasta com duas intermediárias de uma autoridade de teste, com os nomes de
+[`vps/efi/`](vps/efi), e dê à Conta do seed um par de webhook em `efi.env`, recriando a aplicação. No
+ensaio de 2026-11-14, com uma raiz de teste, as duas intermediárias confiadas e uma terceira sob a mesma
+raiz: o certificado de cada intermediária confiada passou, com 204 para `{}` e para um `txid`
+desconhecido; sem certificado, com o da terceira intermediária mandando a cadeia e com um emitido pela
+raiz, o proxy recusou no TLS; o segredo errado deu 403 com `motivo=hmac`; o domínio do aplicativo com o
+cabeçalho forjado deu 403 com `motivo=sem_certificado`, e deu 204 quando a linha que apaga o cabeçalho
+foi tirada do Caddyfile; o subdomínio respondeu 404 fora do aviso, e o nome `localhost` no TLS com o
+Host do aviso, 421. O identificador e o segredo não apareceram no log.
 
 **O limite de conexões no ensaio.** Ele é da máquina, não do compose: no ensaio, carrega-se a mesma tabela
 na máquina virtual do Docker Desktop, onde ela some quando o Docker reinicia. O encaminhador de portas do

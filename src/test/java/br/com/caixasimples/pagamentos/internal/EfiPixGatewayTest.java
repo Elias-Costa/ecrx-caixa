@@ -90,4 +90,88 @@ class EfiPixGatewayTest {
             servidor.stop(0);
         }
     }
+
+    /**
+     * O cadastro do webhook vai na chave Pix da Conta, codificada no caminho, e a recusa da Efí chega
+     * ao mantenedor com o nome e a mensagem dela, sem o segredo da URL.
+     */
+    @Test
+    void cadastroDoWebhookFazPutNaChaveEDevolveARecusaSemOSegredo() throws Exception {
+        String url = EfiPixGateway.urlDoWebhook("pix.loja-da-esquina.com.br", "config-a",
+                "segredo_de_teste-1");
+        AtomicInteger chamadas = new AtomicInteger();
+        AtomicReference<String> metodo = new AtomicReference<>();
+        AtomicReference<String> caminho = new AtomicReference<>();
+        AtomicReference<String> autorizacao = new AtomicReference<>();
+        AtomicReference<String> corpo = new AtomicReference<>();
+        HttpServer servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        servidor.createContext("/v2/webhook/", troca -> {
+            metodo.set(troca.getRequestMethod());
+            caminho.set(troca.getRequestURI().getRawPath());
+            autorizacao.set(troca.getRequestHeaders().getFirst("Authorization"));
+            corpo.set(new String(troca.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            int status;
+            String resposta;
+            switch (chamadas.incrementAndGet()) {
+                case 1 -> {
+                    status = 201;
+                    resposta = "{\"webhookUrl\":\"" + url + "\"}";
+                }
+                case 2 -> {
+                    status = 400;
+                    resposta = "{\"nome\":\"webhook_invalido\",\"mensagem\":\"A autenticação de "
+                            + "TLS mútuo não está configurada na URL informada\"}";
+                }
+                default -> {
+                    status = 400;
+                    resposta = "{\"nome\":\"webhook_invalido\",\"mensagem\":\"Falhou em " + url
+                            + "\"}";
+                }
+            }
+            byte[] bytes = resposta.getBytes(StandardCharsets.UTF_8);
+            troca.sendResponseHeaders(status, bytes.length);
+            try (var saida = troca.getResponseBody()) { saida.write(bytes); }
+        });
+        servidor.start();
+        try {
+            String base = "http://127.0.0.1:" + servidor.getAddress().getPort();
+            HttpClient http = HttpClient.newHttpClient();
+
+            EfiPixGateway.cadastrar(http, base, "token", "+5571999990000", url);
+            assertThat(metodo).hasValue("PUT");
+            assertThat(caminho).hasValue("/v2/webhook/%2B5571999990000");
+            assertThat(autorizacao).hasValue("Bearer token");
+            assertThat(corpo.get()).isEqualTo("{\"webhookUrl\":\"https://pix.loja-da-esquina.com.br"
+                    + "/api/webhooks/pix/config-a?hmac=segredo_de_teste-1&ignorar=\"}");
+
+            assertThatExceptionOfType(IllegalStateException.class)
+                    .isThrownBy(() -> EfiPixGateway.cadastrar(http, base, "token", "chave", url))
+                    .withMessageContaining("400")
+                    .withMessageContaining("webhook_invalido A autenticação de TLS mútuo")
+                    .withMessageNotContaining("segredo_de_teste-1");
+            // Se a Efí um dia repetir a URL na mensagem, o segredo sai antes de ir ao log.
+            assertThatExceptionOfType(IllegalStateException.class)
+                    .isThrownBy(() -> EfiPixGateway.cadastrar(http, base, "token", "chave", url))
+                    .withMessageContaining("hmac=(segredo)")
+                    .withMessageNotContaining("segredo_de_teste-1");
+        } finally {
+            servidor.stop(0);
+        }
+    }
+
+    @Test
+    void urlDoWebhookSoAceitaIdentificadorESegredoSemCodificacao() {
+        assertThat(EfiPixGateway.urlDoWebhook("webhook-pix.localhost", "a1_B-2", "f00d"))
+                .isEqualTo("https://webhook-pix.localhost/api/webhooks/pix/a1_B-2?hmac=f00d&ignorar=");
+        for (String ruim : new String[]{"com&e", "com espaço", "com/barra", "com?", "", "ç"}) {
+            assertThatExceptionOfType(IllegalStateException.class)
+                    .isThrownBy(() -> EfiPixGateway.urlDoWebhook("webhook-pix.localhost", ruim,
+                            "f00d"));
+            assertThatExceptionOfType(IllegalStateException.class)
+                    .isThrownBy(() -> EfiPixGateway.urlDoWebhook("webhook-pix.localhost", "a1",
+                            ruim));
+        }
+        assertThat(EfiPixGateway.motivoDaRecusa("<html>erro</html>"))
+                .isEqualTo("sem detalhe legível");
+    }
 }
