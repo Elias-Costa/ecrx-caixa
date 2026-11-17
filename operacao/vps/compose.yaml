@@ -35,10 +35,13 @@ services:
       # O subdomínio do aviso Pix. Vazio, um site do Caddyfile ficaria sem endereço e o proxy não
       # subiria, levando o aplicativo junto; o nome .localhost só a própria máquina resolve.
       ECRX_CAIXA_WEBHOOK_DOMINIO: ${ECRX_CAIXA_WEBHOOK_DOMINIO:-webhook-pix.localhost}
+      # O subdomínio do aviso Pix do Inter, com o mesmo cuidado do da Efí quando vazio.
+      ECRX_CAIXA_WEBHOOK_DOMINIO_INTER: ${ECRX_CAIXA_WEBHOOK_DOMINIO_INTER:-webhook-pix-inter.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # As autoridades do webhook da Efí em que o domínio do aviso confia, versionadas.
+      # As autoridades do webhook de cada PSP em que o domínio do aviso dele confia, versionadas.
       - ./efi:/etc/caddy/efi:ro
+      - ./inter:/etc/caddy/inter:ro
       # Os certificados e a conta no emissor: perdidos, seriam pedidos de novo, e o emissor limita
       # quantos certificados o mesmo domínio recebe por semana.
       - proxy-dados:/data
@@ -55,9 +58,13 @@ services:
     # O tempo para as requisições em andamento terminarem antes de o processo ser encerrado.
     stop_grace_period: 30s
     # As credenciais Pix são por Conta, com o id dela no nome da variável, e por isso ficam num
-    # arquivo à parte, sem lista fixa aqui. O certificado de cada Conta fica na pasta montada abaixo.
+    # arquivo à parte por PSP, sem lista fixa aqui. O certificado de cada Conta fica na pasta do PSP,
+    # montada abaixo. O arquivo do Inter é opcional: a máquina preparada antes dele não o tem, e o
+    # deploy automático não pode parar por isso.
     env_file:
       - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/efi.env
+      - path: ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/inter.env
+        required: false
     environment: &ambiente-da-aplicacao
       # Mesma máquina, rede interna e porta do banco não publicada: nada passa por fora dela, e a
       # conexão dispensa TLS.
@@ -72,6 +79,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${ECRX_CAIXA_REMOCOES_AWS_SECRET_ACCESS_KEY:-}
     volumes:
       - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/efi:/segredos/efi:ro
+      - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/inter:/segredos/inter:ro
     # Decide quando o deploy terminou. O Docker não reinicia um contêiner que fica doente, só o que
     # termina; uma aplicação travada aparece no vigia, que confere esta mesma rota pelo domínio.
     healthcheck:
@@ -178,9 +186,9 @@ services:
       SPRING_MAIN_WEB_APPLICATION_TYPE: none
       ECRX_CAIXA_SUSPENSAO_CONTA: ${ECRX_CAIXA_SUSPENSAO_CONTA:-}
 
-  # Cadastra na Efí o webhook Pix de uma Conta, no subdomínio do aviso. Lê a credencial, o
-  # certificado e o segredo da Conta como a aplicação; o comando só informa o id dela. Sem o
-  # subdomínio configurado, recusa, em vez de cadastrar o nome que só a máquina resolve.
+  # Cadastra no PSP da Conta o webhook Pix dela, no subdomínio do aviso desse PSP. Lê a credencial,
+  # o certificado e o segredo da Conta como a aplicação; o comando só informa o id dela. Sem o
+  # subdomínio do PSP configurado, recusa, em vez de cadastrar o nome que só a máquina resolve.
   cadastrar-webhook-pix:
     profiles: [cadastrar-webhook-pix]
     image: ghcr.io/elias-costa/ecrx-caixa:${ECRX_CAIXA_VERSAO:-}
@@ -191,14 +199,18 @@ services:
     memswap_limit: 1g
     env_file:
       - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/efi.env
+      - path: ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/inter.env
+        required: false
     environment:
       <<: *ambiente-da-aplicacao
       SPRING_PROFILES_ACTIVE: cadastrar-webhook-pix
       SPRING_MAIN_WEB_APPLICATION_TYPE: none
       ECRX_CAIXA_WEBHOOK_CONTA: ${ECRX_CAIXA_WEBHOOK_CONTA:-}
       ECRX_CAIXA_WEBHOOK_DOMINIO: ${ECRX_CAIXA_WEBHOOK_DOMINIO:-}
+      ECRX_CAIXA_WEBHOOK_DOMINIO_INTER: ${ECRX_CAIXA_WEBHOOK_DOMINIO_INTER:-}
     volumes:
       - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/efi:/segredos/efi:ro
+      - ${ECRX_CAIXA_CONFIGURACAO:-/etc/ecrx-caixa}/inter:/segredos/inter:ro
 
   # A cópia cifrada, de hora em hora, pelo agendador da máquina. A credencial só grava objeto novo
   # no bucket: não lê, não lista e não apaga.

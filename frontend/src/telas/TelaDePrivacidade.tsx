@@ -12,7 +12,7 @@ import { VoltarDaPaginaPublica } from './VoltarDaPaginaPublica'
 export function TelaDePrivacidade() {
   return <main className="cadastro">
     <h1>Aviso de privacidade</h1>
-    <p className="cadastro__apoio">Versão de 01/11/2026. Diz como o ECRX Caixa trata os dados
+    <p className="cadastro__apoio">Versão de 17/11/2026. Diz como o ECRX Caixa trata os dados
       pessoais de quem usa o sistema e de quem aparece nele, conforme a Lei Geral de Proteção de Dados
       (LGPD).</p>
 
@@ -139,8 +139,9 @@ export function TelaDePrivacidade() {
         nele.</li>
       <li><strong>Amazon Web Services</strong>, que guarda no Brasil as cópias de segurança, cifradas
         com uma chave que fica fora do servidor, e o registro das remoções.</li>
-      <li><strong>Efí</strong>, contratada pela própria Conta para a cobrança Pix integrada: em cada
-        cobrança, o ECRX Caixa manda só o valor, a chave Pix e a validade.</li>
+      <li><strong>Efí</strong> ou <strong>Inter</strong>, a instituição que a própria Conta contratou
+        para a cobrança Pix integrada: em cada cobrança, o ECRX Caixa manda a ela só o valor, a chave
+        Pix e a validade.</li>
       <li><strong>O provedor do canal de atendimento</strong>, que guarda as mensagens no Brasil.</li>
       <li><strong>Google</strong>, pelo Gmail, só no pedido de encerramento enquanto o canal não existe,
         possivelmente fora do Brasil.</li>

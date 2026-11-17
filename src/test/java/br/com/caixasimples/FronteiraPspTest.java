@@ -15,31 +15,33 @@ import org.junit.jupiter.api.Test;
 /** Protege RF27 mesmo quando a implementação de um PSP muda dentro do módulo. */
 class FronteiraPspTest {
     private static final String ADAPTERS = "..pagamentos.internal..";
-    private static final DescribedPredicate<JavaClass> TIPO_DA_EFI =
-            new DescribedPredicate<>("tipo específico da Efí") {
+    private static final DescribedPredicate<JavaClass> TIPO_DE_PSP =
+            new DescribedPredicate<>("tipo específico de um PSP") {
                 @Override
                 public boolean test(JavaClass tipo) {
                     String pacote = "." + tipo.getPackageName() + ".";
                     return tipo.getSimpleName().startsWith("Efi")
+                            || tipo.getSimpleName().startsWith("Inter")
                             || pacote.contains(".efipay.")
-                            || pacote.contains(".gerencianet.");
+                            || pacote.contains(".gerencianet.")
+                            || pacote.contains(".bancointer.");
                 }
             };
 
     private static final ArchRule TIPOS_DO_PSP_FICAM_NO_ADAPTER = classes()
-            .that(TIPO_DA_EFI)
+            .that(TIPO_DE_PSP)
             .should().resideInAPackage(ADAPTERS);
 
     private static final ArchRule FORA_DO_ADAPTER_NAO_DEPENDE_DO_PSP = noClasses()
             .that().resideOutsideOfPackage(ADAPTERS)
-            .should().dependOnClassesThat(TIPO_DA_EFI);
+            .should().dependOnClassesThat(TIPO_DE_PSP);
 
     private static final ArchRule FORA_DO_ADAPTER_NAO_ACESSA_INTERNAL = noClasses()
             .that().resideOutsideOfPackage(ADAPTERS)
             .should().dependOnClassesThat().resideInAPackage(ADAPTERS);
 
     @Test
-    void tiposDaEfiNaoEscapamDoAdapter() {
+    void tiposDosPspsNaoEscapamDoAdapter() {
         JavaClasses producao = new ClassFileImporter()
                 .withImportOption(new ImportOption.DoNotIncludeTests())
                 .importPackages("br.com.caixasimples");

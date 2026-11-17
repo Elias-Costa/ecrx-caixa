@@ -286,7 +286,8 @@ variáveis que o compose lista para ele.
 | Variável | De onde vem | Para quê |
 |---|---|---|
 | `ECRX_CAIXA_DOMINIO` | O domínio, com o registro A para a VPS | O site do proxy, o certificado e a conferência do vigia |
-| `ECRX_CAIXA_WEBHOOK_DOMINIO` | Um subdomínio só do aviso Pix, também com o registro A para a VPS | O site do proxy que exige o certificado de cliente da Efí, e a URL que o cadastro do webhook registra; ver [Webhook Pix](#webhook-pix). Vazio, o site fica num nome que só a máquina resolve |
+| `ECRX_CAIXA_WEBHOOK_DOMINIO` | Um subdomínio só do aviso Pix da Efí, também com o registro A para a VPS | O site do proxy que exige o certificado de cliente da Efí, e a URL que o cadastro do webhook da Efí registra; ver [Webhook Pix](#webhook-pix). Vazio, o site fica num nome que só a máquina resolve |
+| `ECRX_CAIXA_WEBHOOK_DOMINIO_INTER` | Um subdomínio só do aviso Pix do Inter, também com o registro A para a VPS | O site do proxy que exige o certificado de cliente do Inter, e a URL que o cadastro do webhook do Inter registra; ver [Webhook Pix](#webhook-pix). Vazio, o site fica num nome que só a máquina resolve |
 | `ECRX_CAIXA_DB_PASSWORD` | Gerada | A senha do papel `ecrx_caixa`, sem superusuário, para a aplicação, a cópia, a restauração e o encerramento; o banco a lê só no primeiro `initdb`, para criar o papel. Trocá-la depois exige trocá-la também dentro do banco; ver [Banco](#banco) |
 | `ECRX_CAIXA_DB_SUPERUSUARIO_PASSWORD` | Gerada | A senha do superusuário `postgres`, que só o contêiner do banco recebe, no primeiro `initdb`. Nenhum serviço conecta com ela |
 | `ECRX_CAIXA_JWT_SECRET` | Gerada | Assinatura dos tokens, com ao menos 32 bytes. Trocá-la obriga todo mundo a entrar de novo |
@@ -309,9 +310,31 @@ certificado `.p12` vai em `/etc/ecrx-caixa/efi/<uuid da Conta>.p12`, com dono 10
 `_CERTIFICADO_P12` aponta para `/segredos/efi/<uuid da Conta>.p12`, onde a pasta aparece dentro da
 aplicação, só para leitura.
 
-O Pix integrado faz parte do plano Completo: configure a Efí só para Conta nele. Fora do plano, a
-aplicação recusa cobrança nova mesmo com a Efí configurada, e o aplicativo não mostra o Pix integrado;
-a cobrança já reservada ainda é consultada e confirmada. O Pix lançado à mão não depende da Efí: o
+`/etc/ecrx-caixa/inter.env` guarda o mesmo para cada Conta que recebe pelo Inter:
+`ECRX_CAIXA_INTER_<UUID>_AMBIENTE` (`HOMOLOGACAO`, o ambiente de testes do Inter, ou `PRODUCAO`),
+`_CLIENT_ID`, `_CLIENT_SECRET`, `_CHAVE_PIX`, `_CERTIFICADO_CRT`, `_CERTIFICADO_KEY`,
+`_CONTA_CORRENTE`, só quando a integração tem mais de uma conta, `_WEBHOOK_ID` e `_WEBHOOK_SECRET`,
+com o par do webhook escolhido como o da Efí. O certificado e a chave vão como o Inter os entrega, em
+`/etc/ecrx-caixa/inter/<uuid da Conta>.crt` e `.key`, com dono 10001, e as duas variáveis apontam
+para `/segredos/inter/<uuid da Conta>.crt` e `.key`. A chave precisa estar em PKCS8, com a linha
+`BEGIN PRIVATE KEY`, que é como o Inter a entrega. O arquivo e a pasta do Inter são opcionais para o
+compose, que por isso pede o Docker Compose 2.24 ou mais (`docker compose version`): a máquina
+preparada antes deles sobe sem eles, e o `preparar.sh` os cria vazios ao rodar de novo.
+
+Na conta Inter Empresas, a integração sai de Soluções para sua empresa, Nova integração. Marque, na
+API Pix, emitir e consultar cobranças imediatas, consultar Pix recebidos e criar e consultar
+webhooks: o token que a aplicação pede leva esses escopos, e a integração sem um deles recusa o
+token. O certificado e a chave são baixados uma vez, na criação, e o Client ID e o Client Secret
+aparecem depois, no detalhe da integração.
+
+Uma Conta tem a Efí ou o Inter, nunca os dois. Com as duas configurações, ela fica sem Pix integrado
+até uma sair, as outras Contas seguem, e cada tentativa registra um erro que o
+[alerta de erros](#vigia) manda ao mantenedor. A Efí não é oferecida a cliente até ser homologada.
+
+O Pix integrado faz parte do plano Completo: configure a Efí ou o Inter só para Conta nele. Fora do
+plano, a aplicação recusa cobrança nova mesmo com o PSP configurado, e o aplicativo não mostra o Pix
+integrado; a cobrança já reservada ainda é consultada e confirmada. O Pix lançado à mão não depende do
+PSP: o
 administrador cadastra a chave Pix e a cidade em Configuração, e o aparelho mostra o QR estático.
 
 ### Webhook Pix
@@ -352,6 +375,35 @@ no proxy e o aviso não chega à aplicação nem deixa linha no log dela: a cobr
 balcão, e a Efí tenta de novo por cerca de cinco horas. Nesse caso, baixe a cadeia nova de
 `https://certificados.efipay.com.br/webhooks/`, confira com `openssl x509 -noout -subject -issuer` qual
 certificado é a intermediária do webhook, ponha só ela no arquivo do ambiente, e recarregue o proxy.
+
+**Inter.** O Inter avisa por um `POST` com o certificado de cliente dele, no subdomínio
+`ECRX_CAIXA_WEBHOOK_DOMINIO_INTER`, num bloco próprio do proxy que confia só na autoridade do webhook
+do Inter, em [`vps/inter/`](vps/inter). Hoje está lá só a do ambiente de homologação, a
+`UAT Partners CDPJ Certificate Authority Intermediate`, que vale até 2034; a de produção sai do
+Internet Banking da primeira Conta real, em Minhas integrações, Certificado Webhook, e entra como
+`webhook-producao.crt` na mesma pasta e na linha `trust_pool` do bloco do Inter no Caddyfile. A mesma
+autoridade emite o certificado de cada cliente da API do Inter, com o nome que o cliente dá à
+integração: por isso o proxy repassa o sujeito do certificado no cabeçalho
+`X-Ecrx-Caixa-Certificado-Inter`, e a aplicação só aceita `CN=Webhook` com `OU=webhook`, recusando
+o resto com `webhook.recusado motivo=certificado`. Os outros sites do proxy apagam esse cabeçalho, e
+o do Inter apaga o da Efí. Não há filtro por IP: o Inter publica uma lista, mas um aviso medido veio
+de fora dela.
+
+Para ligar o aviso de uma Conta do Inter, com ela já em `inter.env`:
+
+1. No Registro.br, um registro A do subdomínio do Inter para o IP da VPS.
+2. `ECRX_CAIXA_WEBHOOK_DOMINIO_INTER=<subdomínio>` em `/etc/ecrx-caixa/ecrx-caixa.env`, e o proxy
+   recriado com `sh compose.sh up -d --wait proxy`.
+3. O mesmo comando de cadastro acima, que escolhe o PSP pela configuração da Conta.
+
+O Inter não chama a URL no cadastro: o log traz `evento=webhook.cadastrado conta=<id>` mesmo com o
+subdomínio fora do ar, e só o primeiro aviso prova o caminho. Ele chama a URL exatamente como
+cadastrada, `https://<subdomínio>/api/webhooks/pix/<_WEBHOOK_ID>?hmac=<_WEBHOOK_SECRET>`, sem
+acrescentar nada. A recusa do Inter sai na exceção, com o título e as violações dele. Cada entrega,
+com o corpo e o status que o aviso recebeu, aparece no Inter em `GET /pix/v2/webhook/callbacks`; o
+aviso que falha volta até 4 vezes, depois de 20, 30, 60 e 120 minutos. No ambiente de homologação
+do Inter, a cobrança paga continua ATIVA: por isso a aplicação decide pelo Pix recebido, consultado
+pelo txid, e não pelo estado da cobrança.
 
 Uma mudança na configuração vale quando o contêiner é recriado: `sh compose.sh up -d --wait` recria só
 os que mudaram, e a troca da aplicação para o serviço, então vai na janela.
@@ -1341,7 +1393,9 @@ encerramento, mas o que não tiver sido enviado até lá se perde. Na hora de ex
 `sh compose.sh stop app`. Retire de
 `/etc/ecrx-caixa/efi.env` todas as linhas da Conta, que começam por
 `ECRX_CAIXA_EFI_<UUID_DA_CONTA_SEM_HIFENS>_`, e apague o certificado dela em
-`/etc/ecrx-caixa/efi/`. Confira que nenhuma linha com esse prefixo restou e guarde a evidência
+`/etc/ecrx-caixa/efi/`; se ela recebia pelo Inter, retire de `/etc/ecrx-caixa/inter.env` as que
+começam por `ECRX_CAIXA_INTER_<UUID_DA_CONTA_SEM_HIFENS>_` e apague o certificado e a chave dela em
+`/etc/ecrx-caixa/inter/`. Confira que nenhuma linha com esses prefixos restou e guarde a evidência
 dessa conferência fora do banco a apagar. O pedido, a data e a evidência ficam guardados no Brasil por
 cinco anos depois do encerramento, como prova de que ele foi pedido e feito no prazo, e depois são
 apagados; o registro do encerramento no bucket de remoções segue os 45 dias dos outros.

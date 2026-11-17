@@ -18,7 +18,7 @@ fi
 
 # Só o dono lê o que for criado daqui em diante.
 umask 077
-mkdir -p "$PASTA/efi"
+mkdir -p "$PASTA/efi" "$PASTA/inter"
 
 # Hexadecimal, e não base64, para o valor não ter caractere que o arquivo de ambiente leia de outro
 # jeito. 32 bytes aleatórios viram 64 caracteres, acima do mínimo de 32 da aplicação.
@@ -36,6 +36,10 @@ ECRX_CAIXA_DOMINIO=
 # Subdomínio só do aviso Pix da Efí, também com o registro A para esta máquina, onde o proxy exige o
 # certificado de cliente dela. Vazio, o aviso não chega, e o Pix integrado fica sem confirmação por ele.
 ECRX_CAIXA_WEBHOOK_DOMINIO=
+
+# Subdomínio só do aviso Pix do Inter, com o registro A para esta máquina, onde o proxy exige o
+# certificado de cliente do Inter. Vazio, o aviso das Contas do Inter não chega.
+ECRX_CAIXA_WEBHOOK_DOMINIO_INTER=
 
 # Gerados aqui. A senha do banco é a do papel ecrx_caixa, sem superusuário, com que a aplicação, a
 # cópia, a restauração e o encerramento conectam; a do superusuário vai só para o contêiner do banco,
@@ -83,6 +87,14 @@ cat > "$PASTA/efi.env" <<FIM
 # _CHAVE_PIX, _CERTIFICADO_P12 (/segredos/efi/<uuid da Conta>.p12, com o arquivo na pasta efi ao
 # lado), _CERTIFICADO_SENHA, _WEBHOOK_ID e _WEBHOOK_SECRET. Os dois do webhook vão na URL que a Efí
 # chama: só letras, números, hífen e sublinhado, como os de openssl rand -hex 32, e um par por Conta.
+FIM
+
+cat > "$PASTA/inter.env" <<FIM
+# Credenciais Pix do Inter por Conta, lidas só pela aplicação. Para cada uma, com o UUID da Conta em
+# maiúsculas e sem hífens: ECRX_CAIXA_INTER_<UUID>_AMBIENTE (HOMOLOGACAO ou PRODUCAO), _CLIENT_ID,
+# _CLIENT_SECRET, _CHAVE_PIX, _CERTIFICADO_CRT e _CERTIFICADO_KEY (/segredos/inter/<uuid da Conta>.crt
+# e .key, com os arquivos na pasta inter ao lado), _CONTA_CORRENTE (só com mais de uma conta na
+# integração), _WEBHOOK_ID e _WEBHOOK_SECRET. Uma Conta tem a Efí ou o Inter, nunca os dois.
 FIM
 
 echo "Gerado $ARQUIVO. Preencha os valores vazios antes do primeiro deploy."

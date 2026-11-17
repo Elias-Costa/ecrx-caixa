@@ -3,6 +3,7 @@ package br.com.caixasimples.vendas.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.pagamentos.domain.SolicitacaoPagamento;
+import br.com.caixasimples.pagamentos.domain.AutenticacaoDoAviso;
 import br.com.caixasimples.pagamentos.domain.ConsultaPix;
 import br.com.caixasimples.pagamentos.domain.PixGateway;
 import br.com.caixasimples.pagamentos.domain.WebhookPixAutenticador;
@@ -35,10 +37,12 @@ import br.com.caixasimples.vendas.internal.VendaRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,13 +84,22 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     @MockitoBean PixGateway gateway;
     @MockitoBean WebhookPixAutenticador autenticador;
 
+    /** Par que nenhum teste configurou é recusado pelo segredo, como no autenticador real. */
+    @BeforeEach
+    void recusaParDesconhecido() {
+        when(autenticador.autenticar(any(), any(), any()))
+                .thenReturn(AutenticacaoDoAviso.recusada("hmac"));
+    }
+
     @Test
     void autenticaReconsultaEConcluiUmaVezSemAtravessarConta(ApplicationEvents eventos)
             throws Exception {
         Cenario a = criar("Webhook A");
         ContaCriada b = criador.criar("Webhook B", "uma senha longa de teste");
-        when(autenticador.autenticar("config-a", "segredo-a")).thenReturn(a.conta.contaId());
-        when(autenticador.autenticar("config-b", "segredo-b")).thenReturn(b.contaId());
+        when(autenticador.autenticar(eq("config-a"), eq("segredo-a"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(a.conta.contaId()));
+        when(autenticador.autenticar(eq("config-b"), eq("segredo-b"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(b.contaId()));
         when(gateway.consultar(any())).thenReturn(new ConsultaPix(a.txid(), "chave-teste",
                 Money.de("12.50"), true));
 
@@ -233,7 +246,8 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     @Test
     void corpoSoELidoDepoisDoCertificadoEDoSegredo() throws Exception {
         ContaCriada conta = criador.criar("Webhook Corpo", "uma senha longa de teste");
-        when(autenticador.autenticar("config-c", "segredo-c")).thenReturn(conta.contaId());
+        when(autenticador.autenticar(eq("config-c"), eq("segredo-c"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
 
         http.perform(post("/api/webhooks/pix/config-c?hmac=segredo-c")
                 .contentType(MediaType.APPLICATION_JSON).content("{"))
@@ -257,7 +271,8 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     @Test
     void cabecalhoEmBrancoNaoContaComoCertificado() throws Exception {
         ContaCriada conta = criador.criar("Webhook Branco", "uma senha longa de teste");
-        when(autenticador.autenticar("config-v", "segredo-v")).thenReturn(conta.contaId());
+        when(autenticador.autenticar(eq("config-v"), eq("segredo-v"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
 
         http.perform(post("/api/webhooks/pix/config-v?hmac=segredo-v")
                 .header(CERTIFICADO, "")
@@ -267,7 +282,7 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                 .header(CERTIFICADO, "   ")
                 .contentType(MediaType.APPLICATION_JSON).content("{"))
                 .andExpect(status().isForbidden());
-        verify(autenticador, never()).autenticar(any(), any());
+        verify(autenticador, never()).autenticar(any(), any(), any());
     }
 
     /**
@@ -277,7 +292,8 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     @Test
     void avisoAutenticadoSemListaPixResponde204SemReconsultar() throws Exception {
         ContaCriada conta = criador.criar("Webhook Teste", "uma senha longa de teste");
-        when(autenticador.autenticar("config-t", "segredo-t")).thenReturn(conta.contaId());
+        when(autenticador.autenticar(eq("config-t"), eq("segredo-t"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
 
         for (String corpo : new String[]{"{}", "{\"evento\":\"teste_webhook\"}", ""}) {
             http.perform(post("/api/webhooks/pix/config-t?hmac=segredo-t&ignorar=")
@@ -303,7 +319,8 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
     @ExtendWith(OutputCaptureExtension.class)
     void recusasVaoAoLogComOMotivoEAOrigem(CapturedOutput saida) throws Exception {
         ContaCriada conta = criador.criar("Webhook Log", "uma senha longa de teste");
-        when(autenticador.autenticar("config-g", "segredo-g")).thenReturn(conta.contaId());
+        when(autenticador.autenticar(eq("config-g"), eq("segredo-g"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
 
         http.perform(post("/api/webhooks/pix/config-g?hmac=segredo-g")
                         .with(requisicao -> {
@@ -328,17 +345,56 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                 .doesNotContain("segredo-");
     }
 
+    /**
+     * A rota junta os cabeçalhos de certificado de qualquer PSP, com o nome em minúsculas e o valor
+     * aparado, e registra o motivo que o autenticador devolve. Qual certificado vale para cada Conta é
+     * decidido em pagamentos.
+     */
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void cabecalhosDeCertificadoChegamAoAutenticadorEARecusaLevaOMotivo(CapturedOutput saida)
+            throws Exception {
+        ContaCriada conta = criador.criar("Webhook Inter", "uma senha longa de teste");
+        String sujeito = "CN=Webhook,OU=webhook,L=Minas Gerais,C=BR";
+        when(autenticador.autenticar(eq("config-i"), eq("segredo-i"),
+                eq(Map.of("x-ecrx-caixa-certificado-inter", sujeito))))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
+        when(autenticador.autenticar(eq("config-i"), eq("segredo-i"),
+                eq(Map.of("x-ecrx-caixa-certificado-efi", IMPRESSAO_DIGITAL))))
+                .thenReturn(AutenticacaoDoAviso.recusada("certificado"));
+
+        http.perform(post("/api/webhooks/pix/config-i?hmac=segredo-i")
+                        .header("X-Ecrx-Caixa-Certificado-Inter", " " + sujeito + " ")
+                        .header("X-Outro-Cabecalho", "fora do prefixo")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNoContent());
+        http.perform(post("/api/webhooks/pix/config-i?hmac=segredo-i")
+                        .with(requisicao -> {
+                            requisicao.setRemoteAddr("203.0.113.92");
+                            return requisicao;
+                        })
+                        .header(CERTIFICADO, IMPRESSAO_DIGITAL)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
+
+        assertThat(saida.getAll())
+                .contains("evento=webhook.recusado motivo=certificado origem=203.0.113.92")
+                .doesNotContain("segredo-i");
+        verify(gateway, never()).consultar(any());
+    }
+
     /** Num formulário, o servidor leria o corpo para achar o segredo; a rota recusa antes. */
     @Test
     void formularioERecusadoNaEscolhaDaRota() throws Exception {
         ContaCriada conta = criador.criar("Webhook Formulario", "uma senha longa de teste");
-        when(autenticador.autenticar("config-f", "segredo-f")).thenReturn(conta.contaId());
+        when(autenticador.autenticar(eq("config-f"), eq("segredo-f"), any()))
+                .thenReturn(AutenticacaoDoAviso.daConta(conta.contaId()));
 
         http.perform(post("/api/webhooks/pix/config-f")
                 .header(CERTIFICADO, IMPRESSAO_DIGITAL)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED).content("hmac=segredo-f"))
                 .andExpect(status().isUnsupportedMediaType());
-        verify(autenticador, never()).autenticar(any(), any());
+        verify(autenticador, never()).autenticar(any(), any(), any());
     }
 
     private Cenario criar(String nome) {

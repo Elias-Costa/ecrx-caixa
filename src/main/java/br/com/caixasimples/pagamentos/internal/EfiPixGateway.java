@@ -62,7 +62,8 @@ class EfiPixGateway implements PixGateway {
         try {
             HttpClient http = cliente(config);
             String token = token(http, config);
-            return criarOuRecuperar(http, config.base(), token, cobranca, valor, config.chave());
+            return CobrancaImediataPadrao.criarOuRecuperar(http, config.base(), token, Map.of(),
+                    cobranca, valor, config.chave());
         } catch (PixIndisponivelException erro) {
             throw erro;
         } catch (InterruptedException erro) {
@@ -81,8 +82,8 @@ class EfiPixGateway implements PixGateway {
         }
         try {
             HttpClient http = cliente(config);
-            HttpResponse<String> resposta = enviar(http, config.base(), "GET",
-                    "/v2/cob/" + cobranca.txid(), token(http, config), null);
+            HttpResponse<String> resposta = CobrancaImediataPadrao.enviar(http, config.base(), "GET",
+                    "/v2/cob/" + cobranca.txid(), token(http, config), Map.of(), null);
             if (resposta.statusCode() != 200) {
                 throw new PixIndisponivelException("consulta da cobranca Pix indisponivel");
             }
@@ -105,7 +106,8 @@ class EfiPixGateway implements PixGateway {
         }
         try {
             HttpClient http = cliente(config);
-            remover(http, config.base(), token(http, config), cobranca);
+            CobrancaImediataPadrao.remover(http, config.base(), token(http, config), Map.of(),
+                    cobranca);
         } catch (PixIndisponivelException erro) {
             throw erro;
         } catch (InterruptedException erro) {
@@ -161,8 +163,8 @@ class EfiPixGateway implements PixGateway {
     static void cadastrar(HttpClient http, String base, String token, String chave, String url)
             throws Exception {
         String caminho = "/v2/webhook/" + URLEncoder.encode(chave, StandardCharsets.UTF_8);
-        HttpResponse<String> resposta = enviar(http, base, "PUT", caminho, token,
-                JSON.writeValueAsString(Map.of("webhookUrl", url)));
+        HttpResponse<String> resposta = CobrancaImediataPadrao.enviar(http, base, "PUT", caminho,
+                token, Map.of(), JSON.writeValueAsString(Map.of("webhookUrl", url)));
         if (resposta.statusCode() < 200 || resposta.statusCode() >= 300) {
             throw new IllegalStateException("A Efí recusou o cadastro do webhook, com "
                     + resposta.statusCode() + ": " + motivoDaRecusa(resposta.body()));
@@ -187,18 +189,6 @@ class EfiPixGateway implements PixGateway {
         }
         motivo = motivo.replaceAll("hmac=[A-Za-z0-9_-]*", "hmac=(segredo)");
         return motivo.length() <= 300 ? motivo : motivo.substring(0, 300);
-    }
-
-    static void remover(HttpClient http, String base, String token, CobrancaPix cobranca)
-            throws Exception {
-        HttpResponse<String> resposta = enviar(http, base, "PATCH", "/v2/cob/" + cobranca.txid(),
-                token, "{\"status\":\"REMOVIDA_PELO_USUARIO_RECEBEDOR\"}");
-        // Um PATCH repetido pode receber 400/409 se a cobrança já foi removida ou paga.
-        // Em ambos os casos a decisão pertence ao GET que o caso de uso faz em seguida.
-        if (resposta.statusCode() != 200 && resposta.statusCode() != 400
-                && resposta.statusCode() != 409) {
-            throw new PixIndisponivelException("remocao da cobranca Pix indisponivel");
-        }
     }
 
     static ConsultaPix interpretarConsulta(JsonNode dados) {
@@ -241,48 +231,6 @@ class EfiPixGateway implements PixGateway {
         } catch (Exception erro) {
             throw new PixIndisponivelException("consulta Pix com dados invalidos", erro);
         }
-    }
-
-    static String criarOuRecuperar(HttpClient http, String base, String token,
-            CobrancaPix cobranca, Money valor, String chave) throws Exception {
-        String caminho = "/v2/cob/" + cobranca.txid();
-        String corpo = JSON.writeValueAsString(Map.of(
-                "calendario", Map.of("expiracao", 900),
-                "valor", Map.of("original", valor.valor().toPlainString()),
-                "chave", chave));
-        HttpResponse<String> resposta = enviar(http, base, "PUT", caminho, token, corpo);
-        if (resposta.statusCode() == 409) {
-            // O mesmo txid pode já ter sido criado antes da resposta anterior se perder.
-            resposta = enviar(http, base, "GET", caminho, token, null);
-        }
-        if (resposta.statusCode() < 200 || resposta.statusCode() >= 300) {
-            throw new PixIndisponivelException("nao foi possivel verificar a cobranca Pix");
-        }
-        JsonNode dados = JSON.readTree(resposta.body());
-        if (!cobranca.txid().equals(dados.path("txid").asText())
-                || !chave.equals(dados.path("chave").asText())
-                || valor.valor().compareTo(new BigDecimal(dados.path("valor")
-                        .path("original").asText("-1"))) != 0
-                || !"ATIVA".equals(dados.path("status").asText())) {
-            throw new PixIndisponivelException("cobranca Pix divergente ou sem estado ativo");
-        }
-        String copiaECola = dados.path("pixCopiaECola").asText("");
-        if (copiaECola.isBlank()) {
-            long locationId = dados.path("loc").path("id").asLong(0);
-            if (locationId <= 0) {
-                throw new PixIndisponivelException("cobranca Pix sem QR verificavel");
-            }
-            HttpResponse<String> qr = enviar(http, base, "GET",
-                    "/v2/loc/" + locationId + "/qrcode", token, null);
-            if (qr.statusCode() != 200) {
-                throw new PixIndisponivelException("QR Pix indisponivel");
-            }
-            copiaECola = JSON.readTree(qr.body()).path("qrcode").asText("");
-        }
-        if (copiaECola.isBlank()) {
-            throw new PixIndisponivelException("QR Pix vazio");
-        }
-        return copiaECola;
     }
 
     private static String prefixoDaConta() {
@@ -342,20 +290,6 @@ class EfiPixGateway implements PixGateway {
             throw new PixIndisponivelException("autorizacao Pix sem token");
         }
         return token;
-    }
-
-    private static HttpResponse<String> enviar(HttpClient http, String base, String metodo,
-            String caminho, String token, String corpo) throws Exception {
-        HttpRequest.Builder pedido = HttpRequest.newBuilder(URI.create(base + caminho))
-                .timeout(Duration.ofSeconds(15)).header("Authorization", "Bearer " + token)
-                .header("Accept", "application/json");
-        if ("PUT".equals(metodo) || "PATCH".equals(metodo)) {
-            pedido.header("Content-Type", "application/json")
-                    .method(metodo, HttpRequest.BodyPublishers.ofString(corpo));
-        } else {
-            pedido.GET();
-        }
-        return http.send(pedido.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private record Configuracao(String base, String clientId, String clientSecret, String chave,

@@ -6,7 +6,8 @@
  * mutadores; aqui não há agregado nem mutador. {@code SolicitacaoPagamento} e
  * {@code ResultadoPagamento} são records imutáveis, e quem chama {@code PaymentService} precisa
  * nomear os dois: constrói o pedido e lê a resposta. A cobrança integrada também usa
- * {@code CobrancaPix} e {@code PixGateway} sem expor o adapter da Efí.
+ * {@code CobrancaPix} e {@code PixGateway} sem expor o adapter de nenhum PSP, e o webhook usa
+ * {@code WebhookPixAutenticador} e {@code AutenticacaoDoAviso}.
  *
  * <p>Custo aceito: outro módulo consegue chamar as fábricas de {@code ResultadoPagamento} direto,
  * sem passar pelo Strategy. A regra continua sendo pagar por {@code PaymentService}, e ela vale

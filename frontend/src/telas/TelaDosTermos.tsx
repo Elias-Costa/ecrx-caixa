@@ -117,8 +117,9 @@ export function TelaDosTermos({ obrigatoria = false }: Props) {
     <p>O servidor, com o aplicativo e o banco de dados, fica numa VPS da HostGator no Brasil. As
       cópias de segurança, cifradas, e o registro das remoções ficam no armazenamento da Amazon Web
       Services no Brasil. A troca de um fornecedor que guarde dados da Conta vem numa versão nova
-      destes termos. A cobrança Pix integrada usa a conta da própria Conta na Efí, contratada por ela;
-      em cada cobrança, o ECRX Caixa manda à Efí só o valor, a chave Pix e a validade.</p>
+      destes termos. A cobrança Pix integrada usa a conta da própria Conta na Efí ou no Inter, a
+      instituição que ela contratou; em cada cobrança, o ECRX Caixa manda a essa instituição só o
+      valor, a chave Pix e a validade.</p>
 
     <h3>Sigilo</h3>
     <p>O ECRX Caixa mantém em sigilo os dados da Conta, e quem tiver acesso a eles em nome do

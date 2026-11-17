@@ -181,8 +181,13 @@ passo "Configuração, gerada uma vez"
 if [ ! -f "$CONFIGURACAO/ecrx-caixa.env" ]; then
     sh "$REPOSITORIO/operacao/vps/criar-configuracao.sh" "$CONFIGURACAO"
 fi
-chown "$UID_DA_APLICACAO:$UID_DA_APLICACAO" "$CONFIGURACAO/efi"
-chmod 700 "$CONFIGURACAO/efi"
+# A máquina preparada antes do Inter ganha a pasta e o arquivo dele, vazios; o que já existe fica.
+mkdir -p "$CONFIGURACAO/inter"
+if [ ! -f "$CONFIGURACAO/inter.env" ]; then
+    (umask 077 && : > "$CONFIGURACAO/inter.env")
+fi
+chown "$UID_DA_APLICACAO:$UID_DA_APLICACAO" "$CONFIGURACAO/efi" "$CONFIGURACAO/inter"
+chmod 700 "$CONFIGURACAO/efi" "$CONFIGURACAO/inter"
 
 passo "Tarefas agendadas: a atualização agora; o deploy da madrugada, a cópia, o vigia e os alertas de recusas e de erros a partir do boot"
 install -m 644 "$REPOSITORIO/operacao/vps/systemd/dnf-automatic.timer.d/janela.conf" \

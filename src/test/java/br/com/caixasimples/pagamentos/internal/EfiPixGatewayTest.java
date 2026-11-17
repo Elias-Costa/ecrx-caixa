@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,15 +51,15 @@ class EfiPixGatewayTest {
             String base = "http://127.0.0.1:" + servidor.getAddress().getPort();
             HttpClient http = HttpClient.newHttpClient();
             for (int i = 0; i < 2; i++) {
-                assertThat(EfiPixGateway.criarOuRecuperar(http, base, "token", cobranca,
-                        Money.de("12.50"), "chave-teste")).isEqualTo("codigo-pix");
+                assertThat(CobrancaImediataPadrao.criarOuRecuperar(http, base, "token", Map.of(),
+                        cobranca, Money.de("12.50"), "chave-teste")).isEqualTo("codigo-pix");
             }
             assertThat(put).hasValue(2);
             assertThat(get).hasValue(1);
             assertThat(corpo.get()).contains("\"expiracao\":900", "\"original\":\"12.50\"");
             assertThatExceptionOfType(PixIndisponivelException.class).isThrownBy(() ->
-                    EfiPixGateway.criarOuRecuperar(http, base, "token", cobranca,
-                            Money.de("12.00"), "chave-teste"));
+                    CobrancaImediataPadrao.criarOuRecuperar(http, base, "token", Map.of(),
+                            cobranca, Money.de("12.00"), "chave-teste"));
         } finally {
             servidor.stop(0);
         }
@@ -82,8 +83,8 @@ class EfiPixGatewayTest {
         try {
             String base = "http://127.0.0.1:" + servidor.getAddress().getPort();
             HttpClient http = HttpClient.newHttpClient();
-            EfiPixGateway.remover(http, base, "token", cobranca);
-            EfiPixGateway.remover(http, base, "token", cobranca);
+            CobrancaImediataPadrao.remover(http, base, "token", Map.of(), cobranca);
+            CobrancaImediataPadrao.remover(http, base, "token", Map.of(), cobranca);
             assertThat(chamadas).hasValue(2);
             assertThat(corpo.get()).contains("REMOVIDA_PELO_USUARIO_RECEBEDOR");
         } finally {

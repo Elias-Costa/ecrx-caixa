@@ -44,9 +44,11 @@
 		lb_try_duration 90s
 		lb_try_interval 1s
 
-		# Só o bloco do aviso Pix, abaixo, escreve este cabeçalho, depois de verificar o certificado da
-		# Efí. Vindo por aqui, ele seria de quem fez a requisição, e a aplicação o tomaria por conferido.
+		# Só os blocos do aviso Pix, abaixo, escrevem estes cabeçalhos, cada um depois de verificar o
+		# certificado do seu PSP. Vindos por aqui, seriam de quem fez a requisição, e a aplicação os
+		# tomaria por conferidos.
 		header_up -X-Ecrx-Caixa-Certificado-Efi
+		header_up -X-Ecrx-Caixa-Certificado-Inter
 	}
 }
 
@@ -79,8 +81,51 @@
 			lb_try_interval 1s
 
 			# A impressão digital do certificado verificado, que a aplicação exige no aviso. O valor
-			# que vier do cliente é trocado por este.
+			# que vier do cliente é trocado por este, e o cabeçalho do Inter, que por aqui não vem do
+			# proxy, é apagado.
 			header_up X-Ecrx-Caixa-Certificado-Efi {http.request.tls.client.fingerprint}
+			header_up -X-Ecrx-Caixa-Certificado-Inter
+		}
+	}
+
+	# O resto do aplicativo não é alcançável por aqui.
+	handle {
+		respond 404
+	}
+}
+
+# Domínio só do aviso Pix do Inter, que exige dele um certificado de cliente emitido pela autoridade do
+# webhook do Inter, de inter/. A mesma autoridade também emite o certificado de cada cliente da API do
+# Inter, com o nome que o cliente dá à integração: por isso o proxy repassa o sujeito do certificado, e
+# a aplicação só aceita o do aviso. Hoje só a autoridade do ambiente de homologação está aqui; a de
+# produção entra quando a primeira Conta real a baixar do Internet Banking.
+#
+# O Inter não chama a URL ao cadastrar o webhook, e o aviso sempre vem com o certificado. O mesmo
+# cuidado com o Host do bloco da Efí vale aqui: o proxy recusa, com 421, o nome diferente do pedido
+# no TLS.
+#
+# Sem o subdomínio configurado, o bloco fica num nome que só a própria máquina resolve.
+{$ECRX_CAIXA_WEBHOOK_DOMINIO_INTER} {
+	tls {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /etc/caddy/inter/webhook-homologacao.crt
+		}
+	}
+
+	request_body {
+		max_size 1MiB
+	}
+
+	handle /api/webhooks/pix/* {
+		reverse_proxy app:8080 {
+			lb_try_duration 90s
+			lb_try_interval 1s
+
+			# O sujeito do certificado verificado, que a aplicação confere. O valor que vier do cliente
+			# é trocado por este, e o cabeçalho da Efí, que por aqui não vem do proxy, é apagado.
+			header_up X-Ecrx-Caixa-Certificado-Inter {http.request.tls.client.subject}
+			header_up -X-Ecrx-Caixa-Certificado-Efi
 		}
 	}
 
