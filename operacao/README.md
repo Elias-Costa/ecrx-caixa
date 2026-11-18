@@ -45,11 +45,13 @@ sem corpo.
    botão **Run workflow** do CI, na aba Actions, faz a mesma pergunta e pede o mesmo deploy à VPS,
    por SSH, na hora.
 4. Na VPS, o [script de deploy](vps/implantar.sh) confere o pedido, põe o clone do repositório no
-   commit, baixa as imagens dele e troca a aplicação: a antiga para, e a nova aplica as migrations,
-   valida o schema contra as entidades e passa no healthcheck. Enquanto isso, o proxy segura as
-   requisições. A versão no ar só é gravada depois de a nova ficar saudável; se ela não ficar em 5
-   minutos, o deploy falha: o da madrugada manda o sinal de falha ao [vigia](#vigia), que avisa por
-   e-mail, e o do botão deixa o CI vermelho, e o GitHub avisa.
+   commit, baixa as imagens dele, em até três tentativas com 30 segundos entre elas, e troca a
+   aplicação: a antiga para, e a nova aplica as migrations, valida o schema contra as entidades e
+   passa no healthcheck. Enquanto isso, o proxy segura as requisições. A versão no ar só é gravada
+   depois de a nova ficar saudável. Se as imagens não baixam, se a nova não fica saudável em 5
+   minutos ou se o proxy recusa o `Caddyfile` novo, o deploy devolve o clone à versão no ar e falha:
+   o da madrugada manda o sinal de falha ao [vigia](#vigia), que avisa por e-mail, e o do botão deixa
+   o CI vermelho, e o GitHub avisa.
 
 **Por que um timer na VPS, e não a agenda do CI.** A agenda do GitHub atrasa com carga: o cron das 3h
 UTC disparou entre 7h40 e 10h50 UTC todos os dias de um mês inteiro, depois do fim da janela. O
@@ -76,6 +78,15 @@ outros dois podem recriar o banco ou o proxy. O botão não passa por cima disso
 madrugada leva o commit na noite seguinte. A mesma janela, das 0h às 5h no fuso America/Bahia (3h às
 8h UTC), vale para troca de plano da VPS, restauração e qualquer manutenção que possa derrubar o
 serviço.
+
+**A falha no meio do deploy.** O proxy lê o `Caddyfile` e as autoridades do webhook de cada PSP
+direto do clone, e a cópia e os vigias rodam o compose e os scripts dele. Parado no commit novo depois
+de uma falha, o clone ficaria à frente dos contêineres: um reinício do proxy leria o `Caddyfile` novo
+com a definição antiga do contêiner, e um site que dependa de variável ou montagem nova não deixaria
+o proxy subir, levando o aplicativo junto. Por isso o script devolve o clone à versão gravada em
+`versao.env` antes de recusar, e a recusa diz para onde ele voltou. Os contêineres que a troca já
+recriou ficam como estão. O commit continua sendo o último aprovado, e a madrugada seguinte, ou o
+botão, tenta de novo.
 
 **A noite perdida.** Com a máquina desligada às 3h UTC, ou com a API do GitHub fora do ar, o deploy
 daquela noite não acontece, e o check `deploy` do vigia avisa; o commit continua sendo o último

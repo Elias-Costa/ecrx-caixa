@@ -17,7 +17,8 @@
 # A aplicação antiga para antes de a nova subir, porque as duas não cabem juntas na memória; o proxy
 # segura as requisições enquanto isso, e por isso o deploy de rotina é de madrugada: uma requisição
 # já em andamento quando a antiga fecha a conexão volta com erro. A versão no ar só é gravada depois
-# de a nova ficar saudável.
+# de a nova ficar saudável, e uma falha depois de o clone ir ao commit novo o devolve à versão no ar
+# antes de recusar.
 set -eu
 
 # Um cancelamento no CI derruba a conexão SSH; o deploy segue até o fim em vez de parar no meio.
@@ -68,6 +69,23 @@ if [ -n "$atual" ] && ! git -C "$REPOSITORIO" diff --quiet "$atual" "$sha" -- \
     esac
 fi
 
+# Depois do checkout, o clone fica no commit novo enquanto os contêineres e o versao.env seguem na
+# versão no ar. O proxy lê o Caddyfile e as pastas montadas direto do clone, e as tarefas da máquina
+# rodam os scripts e o compose dele: parado no commit novo, um reinício do proxy leria o Caddyfile
+# novo com a definição antiga do contêiner, e um bloco que dependa de variável ou montagem nova o
+# impediria de subir, derrubando o aplicativo. Por isso uma falha no download, na troca ou no reload
+# do proxy devolve o clone à versão no ar antes de recusar. Os contêineres que a troca já recriou
+# ficam como estão.
+voltar_e_recusar() {
+    if [ -z "$atual" ]; then
+        recusar "$1; não há versão no ar para onde voltar, e o clone fica em $sha."
+    fi
+    if git -C "$REPOSITORIO" checkout --quiet --detach "$atual"; then
+        recusar "$1; o clone voltou à versão no ar, $atual."
+    fi
+    recusar "$1; o clone não voltou à versão no ar, $atual, e ficou em $sha."
+}
+
 git -C "$REPOSITORIO" checkout --quiet --detach "$sha"
 compose="$REPOSITORIO/operacao/vps/compose.sh"
 
@@ -75,14 +93,24 @@ compose="$REPOSITORIO/operacao/vps/compose.sh"
 ECRX_CAIXA_VERSAO=$sha
 export ECRX_CAIXA_VERSAO
 echo "Baixando as imagens de $sha."
-# A imagem do banco não vem do registro: é construída aqui, pelo up logo abaixo.
-sh "$compose" --profile copia pull --quiet --ignore-buildable
+# O registro às vezes demora a responder e o pull desiste por tempo esgotado; costuma passar em
+# segundos, e sem repetir o commit só iria na noite seguinte. A imagem do banco não vem do registro:
+# é construída aqui, pelo up logo abaixo.
+tentativa=1
+until sh "$compose" --profile copia pull --quiet --ignore-buildable; do
+    if [ "$tentativa" -eq 3 ]; then
+        voltar_e_recusar "as imagens de $sha não baixaram em 3 tentativas"
+    fi
+    echo "As imagens não baixaram; nova tentativa em 30 segundos." >&2
+    sleep 30
+    tentativa=$((tentativa + 1))
+done
 echo "Trocando a aplicação."
 sh "$compose" up --detach --wait --wait-timeout 300 \
-    || recusar "a versão $sha não ficou saudável em 5 minutos; a anterior era ${atual:-nenhuma}."
+    || voltar_e_recusar "a versão $sha não ficou saudável em 5 minutos, e os contêineres que ela recriou ficam como estão"
 # Aplica um Caddyfile alterado sem derrubar conexões; sem mudança, não faz nada.
 sh "$compose" exec -T proxy caddy reload --config /etc/caddy/Caddyfile \
-    || recusar "o proxy recusou o Caddyfile de $sha e continua com o anterior."
+    || voltar_e_recusar "o proxy recusou o Caddyfile de $sha e continua com o anterior"
 
 printf 'ECRX_CAIXA_VERSAO=%s\n' "$sha" > "$VERSAO.nova"
 mv "$VERSAO.nova" "$VERSAO"
