@@ -31,6 +31,22 @@ vulnerabilities:
       interpretar o conteúdo dela nem o da resposta, que ele no máximo comprime.
     expired_at: 2026-12-01
 
+  # O mesmo Caddy 2.11.9 foi compilado com o Go 1.27.3. A correção está no Go 1.27.4 e no 1.26.11, e
+  # nenhuma versão do Caddy compilada com eles tinha saído quando o aviso apareceu. Esta exceção sai com
+  # a primeira imagem do proxy compilada com um Go corrigido, depois dos 7 dias de espera de toda troca
+  # de imagem.
+  - id: CVE-2026-97054
+    purls:
+      - pkg:golang/stdlib@v1.27.3
+    statement: >-
+      Um servidor HTTP/1 que limita o corpo pelo MaxBytesReader pode parar com um panic quando o corpo
+      passa do limite enquanto o cabeçalho da resposta é escrito. O aviso alcança o proxy: o limite de
+      1 MiB do corpo usa esse leitor, e a aplicação pode responder antes de o proxy terminar de ler o
+      corpo. Esperar é aceitável porque o efeito é só a queda do processo, sem leitura nem escrita de
+      dado; o contêiner do proxy reinicia sozinho em segundos, o vigia avisa a indisponibilidade, e
+      o serviço ainda só tem Contas de teste.
+    expired_at: 2026-12-01
+
   # A base da imagem da cópia e da imagem do banco da VPS, o postgres 17 sobre o Alpine 3.24.2, traz a
   # musl 1.2.6-r2, a zlib 1.3.2-r0, a krb5-libs 1.22.2-r1 e a libxslt 1.1.43-r3. As correções estão na
   # musl 1.2.6-r3, na zlib 1.3.2-r1, na krb5-libs 1.22.3-r0 e na libxslt 1.1.43-r4. A base de
