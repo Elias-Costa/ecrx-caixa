@@ -1092,7 +1092,10 @@ html:has(.pdv__rodape) { scroll-padding-bottom: 240px; }
 .pdv__troco--previa { border: 1px dashed var(--cor-borda-controle); border-radius: var(--raio); background: transparent; }
 .pdv__nota { flex-basis: 100%; color: var(--cor-texto-secundario); font-size: 0.85rem; }
 /* O QR fica escuro sobre branco: invertido, não é lido por todo aplicativo de banco. */
-.pdv__qr { display: inline-flex; max-width: 100%; padding: 12px; margin-top: 8px; background: #fff; border-radius: var(--raio); }
+/* O QR do Pix integrado começa em linha própria, com a largura dele: em linha, ele dividia a linha com o
+   fim do texto acima, e a hora do vencimento caía para o lado do QR. A data e a hora não se separam. */
+.pdv__qr { display: flex; width: fit-content; max-width: 100%; padding: 12px; margin-top: 8px; background: #fff; border-radius: var(--raio); }
+.pdv__vencimento { white-space: nowrap; }
 .pdv__qr svg { max-width: 100%; height: auto; }
 .pdv__codigo-pix { overflow-wrap: anywhere; }
 /* O QR do Pix manual, na venda e no recebimento de fiado: o fundo branco é o que o leitor do banco

@@ -33,6 +33,18 @@ describe('o rodapé da comanda', () => {
   })
 })
 
+describe('o QR do Pix integrado na comanda', () => {
+  // O jsdom não calcula layout; a posição medida fica com o navegador, e aqui fica a regra.
+  it('começa em linha própria, e a hora do vencimento não se separa da data', () => {
+    const qr = regra('.pdv__qr')
+    // Em linha, o QR dividia a linha com o fim do texto, e a hora caía para o lado dele.
+    expect(qr).not.toContain('inline')
+    expect(qr).toContain('display: flex')
+    expect(qr).toContain('width: fit-content')
+    expect(regra('.pdv__vencimento')).toContain('white-space: nowrap')
+  })
+})
+
 describe('cabeçalho no celular', () => {
   // O roteiro do navegador mede as linhas. Aqui fica o que o teste de tela não vê: o corte é o do celular,
   // e o tablet e o desktop não mudam.

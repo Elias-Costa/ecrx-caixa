@@ -210,6 +210,53 @@ describe('PDV no tablet', () => {
     }
   })
 
+  it('a confirmação do banco conclui a comanda como uma conclusão comum, com a lista do caixa em dia', async () => {
+    let paga = false
+    const pendente = { id: '00000000-0000-4000-8000-000000000002', forma: 'PIX' as const,
+      valor: 12.5, status: 'PENDENTE' as const, troco: 0,
+      pix: { txid: '00000000000040008000000000000002',
+        expiraEm: '2099-09-22T12:15:00Z', copiaECola: 'codigo-pix',
+        estado: 'DISPONIVEL' as const } }
+    const resumo = { id: comanda.id, sessaoCaixaId: comanda.sessaoCaixaId,
+      usuarioId: comanda.usuarioId, total: comanda.total, criadoEm: comanda.criadoEm }
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockImplementation(async () =>
+      [{ ...resumo, status: paga ? 'CONCLUIDA' as const : 'ABERTA' as const }])
+    vi.spyOn(vendas, 'consultar').mockImplementation(async () => paga
+      ? { ...comanda, status: 'CONCLUIDA', pago: 12.5, faltaPagar: 0,
+        parcelas: [{ ...pendente, status: 'CONFIRMADO' as const }] }
+      : { ...comanda, pago: 12.5, faltaPagar: 0, parcelas: [pendente] })
+    vi.spyOn(vendas, 'comprovante').mockResolvedValue(comprovante)
+    registrarResposta()
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    const intervalos = vi.spyOn(window, 'setInterval')
+    try {
+      mostrar('OPERADOR', { pixIntegrado: true })
+      fireEvent.click(await screen.findByRole('button', { name: /Aberta.*retomar ou cancelar/ }))
+      expect(await screen.findByText(/Pix aguardando confirmação/)).toBeInTheDocument()
+      const consultaDoPix = intervalos.mock.calls.filter(([, intervalo]) => intervalo === 5000).at(-1)?.[0]
+      expect(consultaDoPix).toBeTypeOf('function')
+      // O operador estava noutro controle quando o banco confirmou.
+      screen.getByRole('button', { name: 'Copiar' }).focus()
+
+      paga = true
+      act(() => (consultaDoPix as () => void)())
+
+      expect(await screen.findByLabelText('Comprovante não fiscal')).toBeInTheDocument()
+      // Paga, a parcela não mostra mais a cobrança disponível nem o prazo.
+      expect(screen.getByText('Pix confirmado')).toBeInTheDocument()
+      expect(screen.queryByText(/cobrança disponível/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/vence/)).not.toBeInTheDocument()
+      // A lista do caixa acompanha a comanda, sem a venda ainda aberta para retomar.
+      expect(screen.queryByRole('button', { name: /Aberta.*retomar ou cancelar/ })).not.toBeInTheDocument()
+      // A próxima venda começa pela busca, como depois de uma conclusão comum.
+      await waitFor(() => expect(document.activeElement)
+        .toBe(screen.getByLabelText('Produto por nome ou código')))
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState')
+    }
+  })
+
   it('o Pix manual mostra o QR do valor da chave da Conta e recebe e conclui como o cartão', async () => {
     let concluida = false
     vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)

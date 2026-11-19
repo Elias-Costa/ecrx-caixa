@@ -559,16 +559,30 @@ export function TelaDeVenda() {
     let vivo = true
     const intervalo = window.setInterval(() => {
       if (!alcancaOServidor() || document.visibilityState !== 'visible') return
-      vendas.consultar(vendaId).then((venda) => {
-        if (!vivo) return
-        setAtual((anterior) => anterior?.id === vendaId ? venda : anterior)
-        if (venda.status === 'CONCLUIDA' && sessao) {
-          void vendas.daSessao(sessao.id).then((lista) => { if (vivo) setHistorico(lista) })
-        }
-      }).catch(() => { /* o aviso de rede do shell permanece visível */ })
+      void (async () => {
+        try {
+          const venda = await vendas.consultar(vendaId)
+          if (!vivo) return
+          // A comanda que deixa de ter Pix pendente encerra esta consulta, e o que chegasse depois de trocá-la
+          // seria descartado: o comprovante e a lista do caixa vêm antes, e tudo muda junto. A confirmação do
+          // banco termina como uma conclusão comum, com o comprovante e a próxima venda pela busca.
+          const concluiu = venda.status === 'CONCLUIDA'
+          const recibo = concluiu ? await vendas.comprovante(venda.id) : undefined
+          const lista = concluiu && sessao ? await vendas.daSessao(sessao.id) : undefined
+          if (!vivo) return
+          setAtual((anterior) => anterior?.id === vendaId ? venda : anterior)
+          if (lista) setHistorico(lista)
+          if (recibo) {
+            setComprovante(recibo); setSegundaViaEm(undefined)
+            if (celular) window.scrollTo(0, 0)
+            buscaRef.current?.focus()
+            if (celular) mostrarORodape(rodapeRef.current)
+          }
+        } catch { /* o aviso de rede do shell permanece visível, e a próxima consulta tenta de novo */ }
+      })()
     }, 5000)
     return () => { vivo = false; window.clearInterval(intervalo) }
-  }, [atual?.id, pixPendente, sessao])
+  }, [atual?.id, pixPendente, sessao, celular])
 
   function nomeDoCliente(clienteId: string): string {
     return clientes.find((cliente) => cliente.id === clienteId)?.nome ?? clienteId
@@ -1111,9 +1125,12 @@ export function TelaDeVenda() {
                 {parcela.nsu && ` · NSU ${parcela.nsu}`}
                 {parcela.pix && <div>
                   <strong>Pix {parcela.status === 'PENDENTE' ? 'aguardando confirmação' : parcela.status.toLowerCase()}</strong>
-                  {' · '}{parcela.status === 'RECUSADO' ? 'cobrança removida'
-                    : `cobrança ${ROTULO_DA_COBRANCA_PIX[parcela.pix.estado]}`}
-                  {' · '}vence {dataHora.format(new Date(parcela.pix.expiraEm))}
+                  {/* Paga, a cobrança não está mais disponível nem vence: o estado e o prazo só confundiriam. */}
+                  {parcela.status !== 'CONFIRMADO' && <>
+                    {' · '}{parcela.status === 'RECUSADO' ? 'cobrança removida'
+                      : `cobrança ${ROTULO_DA_COBRANCA_PIX[parcela.pix.estado]}`}
+                    {' · '}vence <span className="pdv__vencimento">{dataHora.format(new Date(parcela.pix.expiraEm))}</span>
+                  </>}
                   {parcela.status === 'PENDENTE' && Date.now() >= Date.parse(parcela.pix.expiraEm) &&
                     <p>Prazo do QR encerrado. Aguarde a conciliação antes de tentar outro Pix.</p>}
                   {parcela.status === 'PENDENTE' && parcela.pix.copiaECola
