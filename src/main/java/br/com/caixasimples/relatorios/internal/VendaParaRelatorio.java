@@ -65,6 +65,10 @@ public class VendaParaRelatorio {
     @Column(name = "cliente_id")
     private UUID clienteId;
 
+    /** A sessão de caixa em que a venda nasceu, para o resumo do caixa fechado. */
+    @Column(name = "sessao_caixa_id", nullable = false, updatable = false)
+    private UUID sessaoCaixaId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private StatusVenda status;

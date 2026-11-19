@@ -61,6 +61,11 @@ ecrx-caixa:
     # Mensalidade do plano completo em reais, com ponto decimal. Sem valor padrão: preço não mora
     # no repositório, e a aplicação não sobe sem ela.
     mensalidade-completo: ${ECRX_CAIXA_MENSALIDADE_COMPLETO}
+  resumo:
+    # Endereço de onde sai o resumo do caixa fechado, verificado no Amazon SES em São Paulo. Em
+    # branco, o resumo fica desligado: é o caso da máquina de desenvolvimento e dos testes. No
+    # servidor publicado o compose exige a variável.
+    remetente: ${ECRX_CAIXA_RESUMO_REMETENTE:}
 
 server:
   port: ${ECRX_CAIXA_PORT:8080}

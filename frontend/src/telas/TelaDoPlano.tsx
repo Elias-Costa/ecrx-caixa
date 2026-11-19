@@ -21,7 +21,7 @@ const NOME_DO_PLANO: Record<Plano, string> = {
 const O_QUE_INCLUI: Record<Plano, string> = {
   GRATIS: 'Cadastro, vendas e caixa, com um usuário e o Pix manual com QR.',
   COMPLETO: 'Tudo do Gratuito, mais os relatórios de faturamento, mais vendidos e fluxo de caixa,'
-    + ' o controle de estoque, mais de um usuário e o Pix integrado, confirmado sem conferir o extrato.',
+    + ' o resumo de cada caixa fechado por e-mail, o controle de estoque, mais de um usuário e o Pix integrado, confirmado sem conferir o extrato.',
 }
 
 const NOME_DO_TIPO: Record<TipoDePedido, string> = {

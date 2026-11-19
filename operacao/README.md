@@ -306,6 +306,7 @@ variáveis que o compose lista para ele.
 | `ECRX_CAIXA_MENSALIDADE_COMPLETO` | À mão, em reais, com ponto decimal | Valor dos pedidos do plano pago. A aplicação não sobe sem ela |
 | `ECRX_CAIXA_REMOCOES_BUCKET` e `ECRX_CAIXA_REMOCOES_AWS_*` | O bucket de remoções e a credencial que só grava nele | O registro mínimo antes de uma exclusão; ver [Remoção](#remoção-de-dados-e-encerramento-da-conta) |
 | `ECRX_CAIXA_REMOCOES_DESTINO` | `s3:<bucket de remoções>/remocoes` | O encerramento grava ali, e a restauração lê dali |
+| `ECRX_CAIXA_RESUMO_REMETENTE` | `resumo@caixa.ecrxtecnologia.com.br`, depois de a identidade estar verificada no SES | O remetente do resumo do caixa por e-mail; ver [Resumo do caixa por e-mail](#resumo-do-caixa-por-e-mail). Vazio, o resumo fica desligado |
 | `ECRX_CAIXA_COPIA_CHAVE_PUBLICA` | A linha `age1...` da chave pública | A cópia é cifrada para ela |
 | `ECRX_CAIXA_COPIA_DESTINO` e `ECRX_CAIXA_COPIA_DESTINO_DIARIA` | `s3:<bucket>/horaria` e `s3:<bucket>/diaria` | Os dois destinos da cópia |
 | `ECRX_CAIXA_COPIA_HORA_DIARIA` | `6` | A hora UTC da cópia que fica 30 dias |
@@ -418,6 +419,52 @@ pelo txid, e não pelo estado da cobrança.
 
 Uma mudança na configuração vale quando o contêiner é recriado: `sh compose.sh up -d --wait` recria só
 os que mudaram, e a troca da aplicação para o serviço, então vai na janela.
+
+### Resumo do caixa por e-mail
+
+Ao fechar um caixa numa Conta do Completo em dia, cada administrador ativo recebe por e-mail o resumo
+daquele caixa: faturamento, total por forma de pagamento, sangrias, diferença e os três mais vendidos,
+sem nome de pessoa. O envio sai pela API do Amazon SES em `sa-east-1`, pela porta 443, com a mesma
+credencial do registro de remoções; nenhuma porta de SMTP é usada.
+
+Sem `ECRX_CAIXA_RESUMO_REMETENTE`, o resumo fica desligado, e a aplicação registra
+`resumo.desligado motivo=sem_remetente` ao subir. Para ligar, na ordem:
+
+1. **Identidade no SES.** No console da AWS, região São Paulo, Amazon SES, Identities, criar a
+   identidade de domínio `caixa.ecrxtecnologia.com.br`, com Easy DKIM (RSA de 2048 bits). O SES mostra
+   três registros CNAME.
+2. **DNS no Registro.br.** Na zona de `ecrxtecnologia.com.br`, os três CNAME do DKIM, e um TXT em
+   `_dmarc.caixa.ecrxtecnologia.com.br` com `v=DMARC1; p=none`. A identidade fica verificada quando o
+   SES acha os CNAME, o que pode levar algumas horas.
+3. **Permissão.** No IAM, acrescentar ao usuário da credencial de remoções uma política que só envia
+   pela identidade e pelo remetente:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Action": "ses:SendEmail",
+       "Resource": "arn:aws:ses:sa-east-1:<conta da AWS>:identity/caixa.ecrxtecnologia.com.br",
+       "Condition": {"StringEquals": {"ses:FromAddress": "resumo@caixa.ecrxtecnologia.com.br"}}
+     }]
+   }
+   ```
+
+4. **Remetente.** `ECRX_CAIXA_RESUMO_REMETENTE=resumo@caixa.ecrxtecnologia.com.br` em
+   `/etc/ecrx-caixa/ecrx-caixa.env`, e a aplicação recriada na janela.
+5. **Prova no sandbox.** Uma conta nova do SES começa no sandbox: só entrega para endereço verificado
+   e no máximo 200 mensagens por dia. Verificar no SES o próprio endereço de administrador de uma Conta
+   de teste no Completo, abrir e fechar um caixa nela e conferir o e-mail e a linha
+   `resumo.enviado conta=<id> sessao=<id> destinatarios=1` no log.
+6. **Saída do sandbox**, antes da primeira Conta real: no SES, Account dashboard, pedir o acesso de
+   produção, com o tipo transacional, o site e a descrição do envio (um resumo por caixa fechado,
+   só ao administrador da Conta, que aceitou os termos). A AWS pode pedir mais detalhes ou negar.
+
+Cada falha de envio deixa `resumo.falhou` em WARN, e o reenvio tenta de novo a cada 15 minutos. Passadas
+24 horas do fechamento, a tentativa seguinte desiste com `resumo.abandonado` em ERROR, que o
+[vigia de erros](#vigia) alerta. A Conta fora do Completo em dia, ou sem administrador ativo, deixa
+`resumo.nao_enviado` em INFO.
 
 ## Banco
 

@@ -75,6 +75,9 @@ services:
       ECRX_CAIXA_PLANO_SECRET: ${ECRX_CAIXA_PLANO_SECRET:-}
       ECRX_CAIXA_MENSALIDADE_COMPLETO: ${ECRX_CAIXA_MENSALIDADE_COMPLETO:-}
       ECRX_CAIXA_REMOCOES_BUCKET: ${ECRX_CAIXA_REMOCOES_BUCKET:-}
+      # Remetente do resumo do caixa por e-mail, verificado no SES. Vazio, o resumo fica desligado, e
+      # a aplicação diz isso no log ao subir; a mesma credencial abaixo precisa poder enviar por ele.
+      ECRX_CAIXA_RESUMO_REMETENTE: ${ECRX_CAIXA_RESUMO_REMETENTE:-}
       AWS_ACCESS_KEY_ID: ${ECRX_CAIXA_REMOCOES_AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${ECRX_CAIXA_REMOCOES_AWS_SECRET_ACCESS_KEY:-}
     volumes:

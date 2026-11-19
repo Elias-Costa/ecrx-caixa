@@ -105,8 +105,10 @@ export function TelaDosTermos({ obrigatoria = false }: Props) {
     <h3>As instruções da Conta</h3>
     <p>As instruções são as funcionalidades do sistema: cadastrar produtos, Clientes e usuários;
       registrar vendas, pagamentos, fiado e recebimentos; abrir, movimentar e fechar o caixa; controlar
-      o estoque; mostrar relatórios; guardar no aparelho o que é preciso para trabalhar sem rede e
-      enviar ao servidor depois; remover Clientes e usuários e encerrar a Conta, a pedido dela.</p>
+      o estoque; mostrar relatórios; no plano Completo, enviar por e-mail ao administrador o resumo
+      de cada caixa fechado, sem nome de pessoa; guardar no aparelho o que é preciso para trabalhar
+      sem rede e enviar ao servidor depois; remover Clientes e usuários e encerrar a Conta, a pedido
+      dela.</p>
     <p>O ECRX Caixa não usa os dados da Conta para outra finalidade, não os vende, não os
       compartilha além dos fornecedores abaixo, não entra em contato com os Clientes da Conta e não
       leva os dados dos Clientes e funcionários para fora do Brasil. Só acessa os dados da Conta para
@@ -116,6 +118,7 @@ export function TelaDosTermos({ obrigatoria = false }: Props) {
     <h3>Fornecedores e onde ficam</h3>
     <p>O servidor, com o aplicativo e o banco de dados, fica numa VPS da HostGator no Brasil. As
       cópias de segurança, cifradas, e o registro das remoções ficam no armazenamento da Amazon Web
+      Services no Brasil, e o resumo do caixa fechado sai pelo serviço de e-mail da Amazon Web
       Services no Brasil. A troca de um fornecedor que guarde dados da Conta vem numa versão nova
       destes termos. A cobrança Pix integrada usa a conta da própria Conta na Efí ou no Inter, a
       instituição que ela contratou; em cada cobrança, o ECRX Caixa manda a essa instituição só o

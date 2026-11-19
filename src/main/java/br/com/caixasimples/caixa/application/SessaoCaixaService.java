@@ -1,5 +1,6 @@
 package br.com.caixasimples.caixa.application;
 
+import br.com.caixasimples.caixa.SessaoCaixaFechada;
 import br.com.caixasimples.caixa.StatusSessaoCaixa;
 import br.com.caixasimples.caixa.TipoMovimentoCaixa;
 import br.com.caixasimples.caixa.domain.SessaoCaixa;
@@ -9,6 +10,7 @@ import br.com.caixasimples.caixa.internal.SessaoCaixaEntity;
 import br.com.caixasimples.caixa.internal.SessaoCaixaRepository;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Money;
+import br.com.caixasimples.shared.TenantContext;
 import br.com.caixasimples.shared.UsuarioContext;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,6 +19,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,9 +58,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class SessaoCaixaService {
 
     private final SessaoCaixaRepository sessoes;
+    private final ApplicationEventPublisher eventos;
 
-    SessaoCaixaService(SessaoCaixaRepository sessoes) {
+    SessaoCaixaService(SessaoCaixaRepository sessoes, ApplicationEventPublisher eventos) {
         this.sessoes = sessoes;
+        this.eventos = eventos;
     }
 
     /**
@@ -287,6 +292,10 @@ public class SessaoCaixaService {
 
         linha.atualizarCom(sessao);
         sessoes.save(linha);
+
+        // O resumo por e-mail ouve este evento depois do commit; a falha dele não desfaz o fechamento.
+        eventos.publishEvent(new SessaoCaixaFechada(TenantContext.exigirAtual(), sessaoId,
+                Instant.now()));
 
         return diferenca;
     }

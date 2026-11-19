@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.context.WebApplicationContext;
@@ -59,6 +60,14 @@ class SeedSemServidorWebTest {
     void criaAContaSemServidorWeb() {
         assertThat(contexto).isNotInstanceOf(WebApplicationContext.class);
         assertThat(credenciais.findByEmailIgnoreCase("seed.esquina@exemplo.test")).isPresent();
+    }
+
+    @Test
+    @DisplayName("sem servidor web, nenhum agendador sobe para manter a execução avulsa viva")
+    void semAgendador() {
+        // O reenvio do resumo por e-mail só liga o agendamento com servidor web.
+        assertThat(contexto.getBeanNamesForType(ScheduledAnnotationBeanPostProcessor.class))
+                .isEmpty();
     }
 
     @TestConfiguration(proxyBeanMethods = false)

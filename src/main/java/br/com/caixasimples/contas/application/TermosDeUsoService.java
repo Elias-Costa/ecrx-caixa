@@ -28,7 +28,7 @@ public class TermosDeUsoService {
      * do aplicativo, que um teste confere ser igual a esta; mudá-la pede o aceite de novo a toda
      * Conta.
      */
-    public static final String VERSAO_VIGENTE = "2026-11-17";
+    public static final String VERSAO_VIGENTE = "2026-11-19";
 
     private final AceiteDosTermosRepository aceites;
     private final ContaRepository contas;

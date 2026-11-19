@@ -63,6 +63,10 @@ ECRX_CAIXA_REMOCOES_DESTINO=
 ECRX_CAIXA_REMOCOES_AWS_ACCESS_KEY_ID=
 ECRX_CAIXA_REMOCOES_AWS_SECRET_ACCESS_KEY=
 
+# Remetente do resumo do caixa por e-mail, num domínio verificado no Amazon SES em São Paulo. A
+# credencial de remoções acima também envia por ele. Vazio, o resumo fica desligado.
+ECRX_CAIXA_RESUMO_REMETENTE=
+
 # Cópia de hora em hora: a linha age1... da chave pública, os destinos s3:<bucket>/horaria e
 # s3:<bucket>/diaria e a credencial que só grava objeto novo. A hora diária é em UTC.
 ECRX_CAIXA_COPIA_CHAVE_PUBLICA=

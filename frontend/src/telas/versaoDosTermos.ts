@@ -3,4 +3,4 @@
  * com a versão que o servidor confere, que um teste do servidor compara com esta: mudá-la pede o
  * aceite de novo a toda Conta.
  */
-export const VERSAO_DOS_TERMOS = '2026-11-17'
+export const VERSAO_DOS_TERMOS = '2026-11-19'
