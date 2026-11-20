@@ -122,8 +122,10 @@ resultado de uma carga deixados aqui não chegam ao build.
 
 A JVM foi medida sob a carga de correção com meia CPU, no limite de 512 MB e no de 1 GB:
 `-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError`, pelo `JAVA_TOOL_OPTIONS` da
-imagem. O porquê de cada valor está no próprio `Dockerfile`. Um `JAVA_TOOL_OPTIONS` definido no compose
-substitui o da imagem inteiro: repita os três valores e meça de novo com a carga.
+imagem. Ao lado deles vai `-XX:-UseBASE64Intrinsics`, que contém a falha CVE-2026-114938 do Java até a
+base da imagem trazer a versão corrigida. O porquê de cada valor está no próprio `Dockerfile`. Um
+`JAVA_TOOL_OPTIONS` definido no compose substitui o da imagem inteiro: repita os quatro valores e meça de
+novo com a carga.
 
 ## Avisos de segurança das dependências
 
@@ -432,12 +434,20 @@ Sem `ECRX_CAIXA_RESUMO_REMETENTE`, o resumo fica desligado, e a aplicação regi
 
 1. **Identidade no SES.** No console da AWS, região São Paulo, Amazon SES, Identities, criar a
    identidade de domínio `caixa.ecrxtecnologia.com.br`, com Easy DKIM (RSA de 2048 bits). O SES mostra
-   três registros CNAME.
+   três registros CNAME. Pelo assistente de configuração do SES, deixar desligados o Gerenciador
+   Virtual de Capacidade de Entrega, o rastreamento de engajamento, a entrega otimizada, a validação
+   automática, os IPs dedicados e o gerenciamento de locatários; e, na identidade, aba do conjunto de
+   configurações, tirar o conjunto padrão que o assistente cria (`my-first-configuration-set`). O
+   aplicativo não usa conjunto de configurações, e com um padrão ligado o envio é recusado por falta de
+   permissão sobre ele.
 2. **DNS no Registro.br.** Na zona de `ecrxtecnologia.com.br`, os três CNAME do DKIM, e um TXT em
    `_dmarc.caixa.ecrxtecnologia.com.br` com `v=DMARC1; p=none`. A identidade fica verificada quando o
    SES acha os CNAME, o que pode levar algumas horas.
 3. **Permissão.** No IAM, acrescentar ao usuário da credencial de remoções uma política que só envia
-   pela identidade e pelo remetente:
+   pela identidade e pelo remetente. No sandbox, o SES confere a permissão também contra cada
+   destinatário verificado, e a recusa diz `not authorized to perform 'ses:SendEmail' on resource
+   ...identity/<destinatário>`: por isso a lista leva também o endereço verificado da prova, que pode
+   sair depois da saída do sandbox.
 
    ```json
    {
@@ -445,7 +455,10 @@ Sem `ECRX_CAIXA_RESUMO_REMETENTE`, o resumo fica desligado, e a aplicação regi
      "Statement": [{
        "Effect": "Allow",
        "Action": "ses:SendEmail",
-       "Resource": "arn:aws:ses:sa-east-1:<conta da AWS>:identity/caixa.ecrxtecnologia.com.br",
+       "Resource": [
+         "arn:aws:ses:sa-east-1:<conta da AWS>:identity/caixa.ecrxtecnologia.com.br",
+         "arn:aws:ses:sa-east-1:<conta da AWS>:identity/<endereço verificado da prova>"
+       ],
        "Condition": {"StringEquals": {"ses:FromAddress": "resumo@caixa.ecrxtecnologia.com.br"}}
      }]
    }
@@ -460,6 +473,16 @@ Sem `ECRX_CAIXA_RESUMO_REMETENTE`, o resumo fica desligado, e a aplicação regi
 6. **Saída do sandbox**, antes da primeira Conta real: no SES, Account dashboard, pedir o acesso de
    produção, com o tipo transacional, o site e a descrição do envio (um resumo por caixa fechado,
    só ao administrador da Conta, que aceitou os termos). A AWS pode pedir mais detalhes ou negar.
+
+A linha `resumo.falhou` traz só o tipo do erro, porque a mensagem da AWS pode trazer o endereço do
+destinatário. Para ler a mensagem, o mesmo envio pela linha de comando da AWS, com a credencial da
+aplicação lida do arquivo, sem a chave no histórico do shell, e a imagem apagada no fim:
+
+```bash
+ID=$(sed -n 's/^ECRX_CAIXA_REMOCOES_AWS_ACCESS_KEY_ID=//p' /etc/ecrx-caixa/ecrx-caixa.env); SEGREDO=$(sed -n 's/^ECRX_CAIXA_REMOCOES_AWS_SECRET_ACCESS_KEY=//p' /etc/ecrx-caixa/ecrx-caixa.env)
+docker run --rm -e AWS_ACCESS_KEY_ID="$ID" -e AWS_SECRET_ACCESS_KEY="$SEGREDO" amazon/aws-cli sesv2 send-email --region sa-east-1 --from-email-address resumo@caixa.ecrxtecnologia.com.br --destination ToAddresses=<destinatário> --content 'Simple={Subject={Data=Teste do resumo},Body={Text={Data=Teste}}}'
+docker image rm amazon/aws-cli
+```
 
 Cada falha de envio deixa `resumo.falhou` em WARN, e o reenvio tenta de novo a cada 15 minutos. Passadas
 24 horas do fechamento, a tentativa seguinte desiste com `resumo.abandonado` em ERROR, que o

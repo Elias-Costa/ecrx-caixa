@@ -63,7 +63,12 @@ EXPOSE 8080
 # O coletor serial é o que a JVM escolhe quando enxerga uma CPU só, e fica explícito porque a
 # medição foi feita com ele: outro coletor gastaria mais memória fora do heap.
 # Sem memória, o processo termina em vez de seguir degradado, e a hospedagem sobe outro.
-ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError"
+# A versão acelerada do Base64, que a JVM usa em CPU x86-64 com AVX-512 VBMI, fica desligada: no Java
+# 21 desta base, uma entrada Base64 malformada a faz escrever além do fim do vetor de saída
+# (CVE-2026-114938), e o nome de arquivo de um corpo multipart, que o Spring decodifica antes de saber
+# a rota e antes do login, leva a entrada até ela. A versão comum é mais lenta, o que não pesa numa
+# aplicação que quase não decodifica Base64. A opção sai quando a base passar a 21.0.13.1 ou mais nova.
+ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError -XX:-UseBASE64Intrinsics"
 
 # Comando, e não ponto de entrada, para que uma execução avulsa da mesma imagem, como a que cria uma
 # Conta, troque o comando inteiro. O ponto de entrada da imagem base só trataria certificados que
