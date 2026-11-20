@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { RegisterSWOptions } from 'virtual:pwa-register/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { gravarIdentidade, gravarToken, lerIdentidade } from '../sessao/armazenamento'
 import type { Identidade } from '../sessao/Identidade'
 import { SessaoProvider } from '../sessao/SessaoProvider'
@@ -9,6 +10,30 @@ import { ExigeSessao } from '../shell/ExigeSessao'
 import { TelaDeLogin } from './TelaDeLogin'
 import { TelaDosTermos } from './TelaDosTermos'
 import { VERSAO_DOS_TERMOS } from './versaoDosTermos'
+
+// O registro do service worker só existe no build do Vite. O falso guarda as opções que a tela
+// passou, para o teste entregar o registro, e diz se há versão nova esperando.
+const versao = vi.hoisted(() => ({
+  esperando: false,
+  opcoes: undefined as RegisterSWOptions | undefined,
+  atualizar: vi.fn((_recarregar?: boolean) => Promise.resolve()),
+}))
+vi.mock('virtual:pwa-register/react', () => ({
+  useRegisterSW: (opcoes?: RegisterSWOptions) => {
+    versao.opcoes = opcoes
+    return {
+      needRefresh: [versao.esperando, () => undefined],
+      offlineReady: [false, () => undefined],
+      updateServiceWorker: versao.atualizar,
+    }
+  },
+}))
+
+beforeEach(() => {
+  versao.esperando = false
+  versao.opcoes = undefined
+  versao.atualizar.mockClear()
+})
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -63,6 +88,17 @@ function abrir(caminho: string) {
 }
 
 const aceite = () => screen.getByRole('button', { name: 'Aceito os termos' })
+
+function recusaDaVersao() {
+  return respostaJson(409, {
+    title: 'Conflict', detail: 'os termos mudaram desde que o aplicativo foi aberto',
+  })
+}
+
+/** Como o navegador faz depois de registrar o service worker: entrega o registro à tela. */
+function entregarRegistro(registro: object) {
+  act(() => versao.opcoes?.onRegisteredSW?.('/sw.js', registro as ServiceWorkerRegistration))
+}
 
 describe('TelaDosTermos', () => {
   it('é pública, mostra a data da versão e não pede aceite a quem só lê', () => {
@@ -128,20 +164,73 @@ describe('TelaDosTermos', () => {
     expect(screen.getByText('dentro do aplicativo')).toBeInTheDocument()
   })
 
-  it('a versão que o servidor já não aceita pede para recarregar, e a tela continua', async () => {
+  it('a versão que o servidor já não aceita troca o aceite por atualizar o aplicativo', async () => {
     entrarComo({ ...bia, termosPendentes: true })
-    servidor({
-      '/api/conta/termos': () => Promise.resolve(respostaJson(409, {
-        title: 'Conflict', detail: 'os termos mudaram desde que o aplicativo foi aberto',
-      })),
-    })
+    const update = vi.fn(() => Promise.resolve())
+    servidor({ '/api/conta/termos': () => Promise.resolve(recusaDaVersao()) })
     abrir('/')
+    entregarRegistro({ update })
 
     fireEvent.click(aceite())
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Recarregue a página')
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Há uma versão nova do aplicativo com os termos atualizados.')
+    const atualizar = screen.getByRole('button', { name: 'Atualizar o aplicativo' })
+    await waitFor(() => expect(atualizar).toHaveFocus())
+    expect(screen.queryByRole('button', { name: 'Aceito os termos' })).not.toBeInTheDocument()
+    // A versão nova começa a baixar já na recusa, antes do clique.
+    expect(update).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('dentro do aplicativo')).not.toBeInTheDocument()
     expect(lerIdentidade()?.termosPendentes).toBe(true)
+  })
+
+  it('com a versão nova já baixada, a tela mostra no alto o aviso do cabeçalho, que a aplica', () => {
+    versao.esperando = true
+    entrarComo({ ...bia, termosPendentes: true })
+    servidor({})
+    abrir('/')
+
+    expect(screen.getByRole('status')).toHaveTextContent('Nova versão disponível.')
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }))
+
+    expect(versao.atualizar).toHaveBeenCalledWith(true)
+  })
+
+  it('depois da recusa, com a versão nova já baixada, o botão a aplica e recarrega', async () => {
+    versao.esperando = true
+    entrarComo({ ...bia, termosPendentes: true })
+    servidor({ '/api/conta/termos': () => Promise.resolve(recusaDaVersao()) })
+    abrir('/')
+
+    fireEvent.click(aceite())
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar o aplicativo' }))
+
+    await waitFor(() => expect(versao.atualizar).toHaveBeenCalledWith(true))
+    // O aviso do alto sai com a recusa: a saída é uma só, junto do aceite.
+    expect(screen.queryByRole('button', { name: 'Atualizar' })).not.toBeInTheDocument()
+  })
+
+  it('depois da recusa, sem a versão nova ainda, o botão a procura e a aplica quando chega', async () => {
+    entrarComo({ ...bia, termosPendentes: true })
+    const registro = { installing: null as object | null, waiting: null, update: vi.fn() }
+    // A primeira procura, na recusa, ainda não acha nada; a do clique acha e começa a baixar.
+    registro.update
+      .mockImplementationOnce(() => Promise.resolve())
+      .mockImplementationOnce(() => {
+        registro.installing = {}
+        versao.esperando = true
+        return Promise.resolve()
+      })
+    servidor({ '/api/conta/termos': () => Promise.resolve(recusaDaVersao()) })
+    abrir('/')
+    entregarRegistro(registro)
+
+    fireEvent.click(aceite())
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar o aplicativo' }))
+
+    expect(await screen.findByRole('button', { name: 'Atualizando...' })).toBeDisabled()
+    await waitFor(() => expect(versao.atualizar).toHaveBeenCalledWith(true))
+    expect(registro.update).toHaveBeenCalledTimes(2)
   })
 
   it('sem rede, avisa que o aceite precisa dela', async () => {

@@ -10,6 +10,16 @@ import { responderConfirmacao } from './confirmacaoDeTeste'
 import { TelaDaSenha } from './TelaDaSenha'
 import { TelaDeLogin } from './TelaDeLogin'
 
+// A guarda da sessão leva à tela dos termos, que registra o service worker; o registro só existe no
+// build do Vite, e aqui nenhuma versão nova espera.
+vi.mock('virtual:pwa-register/react', () => ({
+  useRegisterSW: () => ({
+    needRefresh: [false, () => undefined],
+    offlineReady: [false, () => undefined],
+    updateServiceWorker: () => Promise.resolve(),
+  }),
+}))
+
 afterEach(() => vi.restoreAllMocks())
 
 const ana: Identidade = {

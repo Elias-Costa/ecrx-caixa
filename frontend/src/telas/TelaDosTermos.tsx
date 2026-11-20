@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import { ErroDaApi, SemConexao } from '../api/cliente'
 import { contas } from '../api/contas'
 import { sessaoAtual } from '../sessao/armazenamento'
@@ -23,9 +24,43 @@ type Props = {
  * que não mostrou.
  */
 export function TelaDosTermos({ obrigatoria = false }: Props) {
+  return obrigatoria ? <TermosObrigatorios /> : <TextoDosTermos fim={<VoltarDaPaginaPublica />} />
+}
+
+/**
+ * Os termos que o administrador precisa aceitar, com o jeito de trazer a versão nova do aplicativo.
+ *
+ * O aplicativo instalado guarda a versão em que foi aberto, e uma versão nova dos termos chega junto
+ * com uma versão nova dele. Recarregar não a traz: a versão nova espera até alguém pedir para
+ * atualizar, e o aviso que pede fica no cabeçalho, que esta tela não mostra. Sem ele aqui, o
+ * administrador ficaria preso no texto antigo, que o servidor recusa. Por isso esta tela mostra no
+ * alto o mesmo aviso do cabeçalho quando a versão nova já chegou, e troca a recusa por um botão que a
+ * procura, aplica e recarrega.
+ */
+function TermosObrigatorios() {
   const { identidade, sair, atualizarIdentidade } = useSessao()
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
+  // O servidor recusou a versão mostrada: só a versão nova do aplicativo traz o texto que ele aceita.
+  const [textoAntigo, definirTextoAntigo] = useState(false)
+  const [atualizando, definirAtualizando] = useState(false)
+  const [aplicarQuandoChegar, definirAplicarQuandoChegar] = useState(false)
+  const [registro, definirRegistro] = useState<ServiceWorkerRegistration>()
+  const botaoDeAtualizar = useRef<HTMLButtonElement>(null)
+  const {
+    needRefresh: [precisaAtualizar],
+    updateServiceWorker,
+  } = useRegisterSW({ onRegisteredSW: (_endereco, registration) => definirRegistro(registration) })
+
+  // A versão procurada pelo botão termina de baixar depois do clique; aplicada aqui, recarrega já com ela.
+  useEffect(() => {
+    if (aplicarQuandoChegar && precisaAtualizar) void updateServiceWorker(true)
+  }, [aplicarQuandoChegar, precisaAtualizar, updateServiceWorker])
+
+  // O botão de aceitar sai da tela com a recusa; o foco vai para a única saída que sobra.
+  useEffect(() => {
+    if (textoAntigo) botaoDeAtualizar.current?.focus()
+  }, [textoAntigo])
 
   async function aceitar() {
     setErro(null)
@@ -37,13 +72,78 @@ export function TelaDosTermos({ obrigatoria = false }: Props) {
       // Outro login nesta aba durante o pedido tem a identidade dele, que este aceite não muda.
       if (sessaoAtual() === sessao) atualizarIdentidade({ ...identidade, termosPendentes: false }, sessao)
     } catch (falha) {
-      setErro(mensagemDe(falha))
+      if (falha instanceof ErroDaApi && falha.status === 409) {
+        definirTextoAntigo(true)
+        // Começa a baixar a versão nova enquanto a pessoa lê o aviso; sem rede, o botão tenta de novo.
+        registro?.update().catch(() => undefined)
+      } else {
+        setErro(mensagemDe(falha))
+      }
     } finally {
       setEnviando(false)
     }
   }
 
+  async function atualizarOAplicativo() {
+    definirAtualizando(true)
+    if (precisaAtualizar) {
+      await updateServiceWorker(true)
+      return
+    }
+    // Sem service worker, como no navegador que não o tem, recarregar já busca a versão nova.
+    if (!registro) {
+      window.location.reload()
+      return
+    }
+    await registro.update().catch(() => undefined)
+    if (registro.installing || registro.waiting) {
+      definirAplicarQuandoChegar(true)
+      return
+    }
+    window.location.reload()
+  }
+
+  const avisoDeVersaoNova = precisaAtualizar && !textoAntigo
+    ? <div className="faixa" role="status">
+      <span>Nova versão disponível.</span>
+      <button type="button" className="botao" onClick={() => void updateServiceWorker(true)}>
+        Atualizar
+      </button>
+    </div>
+    : null
+
+  return <TextoDosTermos aviso={avisoDeVersaoNova} fim={
+    <section className="cadastro__formulario">
+      <p>Para continuar, aceite estes termos em nome da Conta.</p>
+      {erro && <p className="mensagem-erro" role="alert">{erro}</p>}
+      {textoAntigo
+        ? <>
+          <p className="mensagem-erro" role="alert">
+            Há uma versão nova do aplicativo com os termos atualizados.
+          </p>
+          <button ref={botaoDeAtualizar} className="botao" type="button" disabled={atualizando}
+            onClick={() => void atualizarOAplicativo()}>
+            {atualizando ? 'Atualizando...' : 'Atualizar o aplicativo'}
+          </button>
+        </>
+        : <button className="botao" type="button" disabled={enviando} onClick={() => void aceitar()}>
+          {enviando ? 'Aceitando...' : 'Aceito os termos'}
+        </button>}
+      <p><button className="botao botao--secundario" type="button" onClick={sair}>Sair</button></p>
+    </section>
+  } />
+}
+
+type PropsDoTexto = {
+  /** O aviso de versão nova, no alto, quando há. */
+  aviso?: ReactNode
+  /** O que vem depois do texto: o aceite, ou o caminho de volta na página pública. */
+  fim: ReactNode
+}
+
+function TextoDosTermos({ aviso, fim }: PropsDoTexto) {
   return <main className="cadastro">
+    {aviso}
     <h1>Termos de uso</h1>
     <p className="cadastro__apoio">Versão de {mostrarData(VERSAO_DOS_TERMOS)}. Valem para a Conta, o
       negócio que usa o ECRX Caixa, e são aceitos pelo administrador dela.</p>
@@ -162,16 +262,7 @@ export function TelaDosTermos({ obrigatoria = false }: Props) {
     <p>No fim do contrato, os dados da Conta seguem o que está em Encerramento: apagados em até quinze
       dias, sem exportação, com as cópias expirando nos prazos delas.</p>
 
-    {obrigatoria
-      ? <section className="cadastro__formulario">
-        <p>Para continuar, aceite estes termos em nome da Conta.</p>
-        {erro && <p className="mensagem-erro" role="alert">{erro}</p>}
-        <button className="botao" type="button" disabled={enviando} onClick={() => void aceitar()}>
-          {enviando ? 'Aceitando...' : 'Aceito os termos'}
-        </button>
-        <p><button className="botao botao--secundario" type="button" onClick={sair}>Sair</button></p>
-      </section>
-      : <VoltarDaPaginaPublica />}
+    {fim}
   </main>
 }
 
@@ -184,7 +275,6 @@ function mensagemDe(falha: unknown): string {
   if (falha instanceof SemConexao) return 'Sem conexão. Aceitar os termos precisa de rede.'
   if (falha instanceof ErroDaApi) {
     if (falha.status === 401) return 'A sessão foi encerrada. Entre de novo.'
-    if (falha.status === 409) return 'Os termos mudaram desde que o aplicativo foi aberto. Recarregue a página para ler a versão nova.'
     return falha.detalhe ?? falha.titulo
   }
   return 'Não foi possível concluir. Tente de novo.'

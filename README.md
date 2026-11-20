@@ -202,7 +202,9 @@ interesse, e a quem pedir cada direito do art. 18 da LGPD, com o prazo. O ADMIN 
 da Conta pelo canal indicado nele. Os
 [termos de uso](frontend/src/telas/TelaDosTermos.tsx), com o anexo de tratamento de dados, também são
 públicos: dizem o que o ECRX Caixa faz com os dados que a Conta registra, onde eles ficam, o aviso
-de incidente e o fim do contrato, e o ADMIN os aceita antes de usar o aplicativo. O procedimento em
+de incidente e o fim do contrato, e o ADMIN os aceita antes de usar o aplicativo. Uma versão nova dos
+termos chega com uma versão nova do aplicativo, e a tela do aceite oferece atualizá-lo ali mesmo,
+porque o aplicativo instalado continua na versão antiga até alguém pedir. O procedimento em
 [`operacao/exclusao/`](operacao/exclusao/) remove as linhas da Conta e exige a retirada dos segredos
 da Conta; o registro externo das remoções é reaplicado quando uma cópia do banco é restaurada.
 
