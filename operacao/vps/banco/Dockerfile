@@ -8,7 +8,7 @@
 # Construída na própria VPS pelo compose, e não publicada: muda só quando este arquivo muda, e cada
 # mudança recria o banco, por isso vai ao ar só na janela de manutenção. A imagem da cópia usa o
 # mesmo digest, para o pg_dump ser o do servidor, e os dois mudam juntos.
-FROM postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+FROM postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
 
 RUN rm -f /usr/local/bin/gosu
 
