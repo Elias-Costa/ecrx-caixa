@@ -221,4 +221,27 @@ public interface VendaParaRelatorioRepository extends Repository<VendaParaRelato
     List<LancamentoEmPix> recebimentosPixLancadosEntre(@Param("pix") FormaPagamento pix,
             @Param("inicio") Instant inicio, @Param("fim") Instant fim,
             @Param("usuarioId") UUID usuarioId);
+
+    /**
+     * A soma e a contagem dos recebimentos de fiado lançados no intervalo, em todas as formas, para
+     * o resumo mensal.
+     *
+     * <p><strong>O intervalo é o do recebimento</strong>, e não o da conclusão da venda: o fiado
+     * vendido num mês e pago no outro entra no mês do pagamento, que é quando o dinheiro chegou. Pelo
+     * mesmo motivo entra o recebimento de venda de qualquer situação. A contagem é de recebimentos,
+     * e não de vendas: um fiado pago em três vezes são três.
+     *
+     * <p>Mesmo intervalo semiaberto e mesma junção por id das consultas de recebimento acima; o
+     * isolamento vem do tenant da venda e do recebimento (RNF05). Sempre devolve uma linha, com o
+     * total nulo quando não houve recebimento, como {@link #totaisEntre}.
+     */
+    @Query("""
+            select new br.com.caixasimples.relatorios.internal.TotaisDeVendas(
+                sum(r.valor), count(r))
+            from VendaParaRelatorio v
+              join RecebimentoParaRelatorio r on r.vendaId = v.id
+            where r.criadoEm >= :inicio
+              and r.criadoEm < :fim
+            """)
+    TotaisDeVendas recebimentosEntre(@Param("inicio") Instant inicio, @Param("fim") Instant fim);
 }

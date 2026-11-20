@@ -106,4 +106,36 @@ public interface ItemVendaParaRelatorioRepository extends Repository<ItemVendaPa
     List<ProdutoVendido> maisVendidosPorValorEntre(@Param("status") StatusVenda status,
             @Param("inicio") Instant inicio, @Param("fim") Instant fim,
             @Param("usuarioId") UUID usuarioId, Limit limite);
+
+    /**
+     * Cada item das vendas de um status cuja conclusão caiu no intervalo, com o tipo do produto e o
+     * desconto da venda, para o resumo mensal separar mercadoria de serviço.
+     *
+     * <p><strong>Devolve itens, e não uma soma por tipo</strong>, porque o desconto dado na venda
+     * inteira se reparte entre os itens dela pelo subtotal de cada um, com o centavo do
+     * arredondamento num item escolhido; essa conta é por venda e mora no caso de uso, onde se lê.
+     * Um mês de um negócio pequeno são alguns milhares de linhas curtas.
+     *
+     * <p>O subtotal é a mesma expressão do ranking acima, com o arredondamento por item do domínio,
+     * para mercadoria mais serviço fechar com o faturamento. As junções são por id, escritas na
+     * consulta, e o isolamento vem do tenant de cada mapeamento, o item, a venda e o produto (RNF05).
+     *
+     * <p>A ordem põe os itens da mesma venda juntos e, dentro dela, na ordem da comanda, que é a
+     * ordem do desempate do rateio; o id do item desempata o mesmo instante.
+     */
+    @Query("""
+            select new br.com.caixasimples.relatorios.internal.ItemParaRateio(
+                v.id, v.valorDesconto, i.id, i.criadoEm,
+                round(i.quantidade * i.precoUnitario, 2) - i.desconto,
+                p.tipo)
+            from ItemVendaParaRelatorio i
+              join VendaParaRelatorio v on v.id = i.vendaId
+              join ProdutoParaRelatorio p on p.id = i.produtoId
+            where v.status = :status
+              and v.concluidoEm >= :inicio
+              and v.concluidoEm < :fim
+            order by v.id, i.criadoEm, i.id
+            """)
+    List<ItemParaRateio> itensDasVendasEntre(@Param("status") StatusVenda status,
+            @Param("inicio") Instant inicio, @Param("fim") Instant fim);
 }

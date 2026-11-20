@@ -78,6 +78,13 @@ public class VendaParaRelatorio {
     private BigDecimal valorTotal;
 
     /**
+     * O desconto dado na venda inteira, fora o de cada item; zero quando não há. O resumo mensal o
+     * reparte entre os itens para separar mercadoria de serviço.
+     */
+    @Column(name = "valor_desconto", nullable = false)
+    private BigDecimal valorDesconto;
+
+    /**
      * O instante que delimita o dia do faturamento: quando os pagamentos fecharam a conta. Nulo
      * na comanda ABERTA e na CANCELADA que nunca concluiu; gravado uma vez e nunca alterado, nem
      * pelo cancelamento.

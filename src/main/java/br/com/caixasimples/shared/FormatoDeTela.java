@@ -5,6 +5,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
@@ -24,6 +25,8 @@ public final class FormatoDeTela {
             DecimalFormatSymbols.getInstance(Locale.forLanguageTag("pt-BR"));
 
     private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    private static final DateTimeFormatter MES = DateTimeFormatter.ofPattern("MM/yyyy");
 
     private FormatoDeTela() {
     }
@@ -49,6 +52,11 @@ public final class FormatoDeTela {
     /** O dia como o balcão o escreve: {@code 23/10/2026}. */
     public static String data(LocalDate dia) {
         return DIA.format(dia);
+    }
+
+    /** O mês do calendário como o balcão o escreve: {@code 11/2026}. */
+    public static String mes(YearMonth mes) {
+        return MES.format(mes);
     }
 
     /**

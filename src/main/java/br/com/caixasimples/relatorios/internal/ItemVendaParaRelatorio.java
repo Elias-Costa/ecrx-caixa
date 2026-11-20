@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.TenantId;
@@ -57,6 +58,13 @@ public class ItemVendaParaRelatorio {
     /** Desconto deste item; zero quando não há, nunca nulo. */
     @Column(nullable = false)
     private BigDecimal desconto;
+
+    /**
+     * Quando o item entrou na comanda. É a ordem do comprovante, e o resumo mensal a usa para
+     * desempatar o rateio do desconto da venda.
+     */
+    @Column(name = "criado_em", nullable = false, updatable = false)
+    private Instant criadoEm;
 
     protected ItemVendaParaRelatorio() {
         // exigido pelo JPA, e o unico construtor de proposito: ninguem instancia esta classe

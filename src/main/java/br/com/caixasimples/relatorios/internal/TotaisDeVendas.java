@@ -13,9 +13,14 @@ import java.math.BigDecimal;
  * <p>Sem {@code contaId}, pelo mesmo motivo de toda projeção do projeto: quem filtra é o tenant
  * na entidade, e devolver a conta só daria a quem lê a ideia de conferi-la à mão (RNF05).
  *
- * @param total      a soma de {@code valor_total}; <strong>nulo quando nenhuma venda entrou</strong>,
- *                   porque a soma de zero linhas é nula em SQL, e é o serviço quem a traduz em zero
- * @param quantidade quantas vendas entraram na soma; zero, e não nulo, quando nenhuma
+ * <p>A soma dos recebimentos de fiado do resumo mensal tem a mesma forma, uma soma e uma contagem,
+ * e usa este record: lá, a quantidade conta recebimentos, e não vendas.
+ *
+ * @param total      a soma de {@code valor_total}, ou do valor dos recebimentos;
+ *                   <strong>nulo quando nenhuma linha entrou</strong>, porque a soma de zero linhas
+ *                   é nula em SQL, e é o serviço quem a traduz em zero
+ * @param quantidade quantas vendas, ou quantos recebimentos, entraram na soma; zero, e não nulo,
+ *                   quando nenhum
  */
 public record TotaisDeVendas(BigDecimal total, Long quantidade) {
 }

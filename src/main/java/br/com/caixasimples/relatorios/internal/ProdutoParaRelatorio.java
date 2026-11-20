@@ -1,7 +1,10 @@
 package br.com.caixasimples.relatorios.internal;
 
+import br.com.caixasimples.cadastro.TipoProduto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.util.UUID;
@@ -9,8 +12,9 @@ import org.hibernate.annotations.Immutable;
 import org.hibernate.annotations.TenantId;
 
 /**
- * A tabela {@code produto} vista pelos relatórios: só o que uma linha do ranking dos mais vendidos
- * mostra ao lado dos números, o nome e a unidade.
+ * A tabela {@code produto} vista pelos relatórios: o que uma linha do ranking dos mais vendidos
+ * mostra ao lado dos números, o nome e a unidade, e o tipo, que separa mercadoria de serviço no
+ * resumo mensal.
  *
  * <p><strong>Por que um mapeamento próprio, e não uma pergunta ao cadastro.</strong> O cadastro já
  * responde nome e unidade de uma lista de produtos, para o comprovante. Usar essa resposta aqui
@@ -45,6 +49,15 @@ public class ProdutoParaRelatorio {
     /** Livre e opcional no cadastro; é o que dá sentido à quantidade somada, 3 kg ou 3 un. */
     @Column
     private String unidade;
+
+    /**
+     * Mercadoria ou serviço, para o resumo mensal separar o faturamento entre os dois. O cadastro
+     * não troca o tipo de um produto depois de criado, então o tipo lido hoje é o da época da venda,
+     * sem cópia no item.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TipoProduto tipo;
 
     protected ProdutoParaRelatorio() {
         // exigido pelo JPA, e o unico construtor de proposito: ninguem instancia esta classe

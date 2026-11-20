@@ -124,4 +124,7 @@ export const relatorios = {
     chamarApi<ConferenciaDoPix>(comParametros('/api/relatorios/conferencia-do-pix', {
       dia, operadorId,
     })),
+  /** O mês como AAAA-MM, já terminado; volta a planilha CSV pronta para salvar (RF67). */
+  resumoMensal: (mes: string) =>
+    chamarApi<Blob>(comParametros('/api/relatorios/resumo-mensal', { mes }), { comoArquivo: true }),
 }

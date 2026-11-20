@@ -75,6 +75,12 @@ export type OpcoesDaChamada = {
   autenticado?: boolean
   /** Em milissegundos; sem ele, {@link TEMPO_LIMITE}. */
   tempoLimite?: number
+  /**
+   * Verdadeiro na rota que responde um arquivo, como o resumo mensal: a chamada devolve o Blob da
+   * resposta em vez de ler JSON. O token, a renovação, o prazo e a guarda de sessão são os mesmos, e o
+   * erro continua chegando em Problem Details.
+   */
+  comoArquivo?: boolean
 }
 
 /**
@@ -134,6 +140,11 @@ export async function chamarApi<T>(caminho: string, opcoes: OpcoesDaChamada = {}
     throw erro
   }
   if (resposta.status === 204) return undefined as T
+  if (opcoes.comoArquivo) {
+    const arquivo = await resposta.blob()
+    exigirSessaoDaChamada()
+    return arquivo as T
+  }
   const corpo = (await resposta.json()) as T
   exigirSessaoDaChamada()
   return corpo

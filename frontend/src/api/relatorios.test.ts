@@ -51,6 +51,19 @@ describe('chamadas dos relatórios', () => {
     expect(caminhoPedido(fluxo)).toBe('/api/relatorios/fluxo-de-caixa?inicio=2026-09-01&fim=2026-09-15')
   })
 
+  it('o resumo mensal leva o mês e devolve o arquivo da resposta', async () => {
+    gravarToken('token-de-teste')
+    const fetchFalso = vi.fn().mockResolvedValue(new Response('Resumo das vendas;10/2026', {
+      status: 200, headers: { 'Content-Type': 'text/csv;charset=UTF-8' },
+    }))
+    vi.stubGlobal('fetch', fetchFalso)
+
+    const arquivo = await relatorios.resumoMensal('2026-10')
+
+    expect(caminhoPedido(fetchFalso)).toBe('/api/relatorios/resumo-mensal?mes=2026-10')
+    expect(await arquivo.text()).toBe('Resumo das vendas;10/2026')
+  })
+
   it('a conferência do cartão leva um dia e, quando houver, o operador', async () => {
     gravarToken('token-de-teste')
     const daConta = vi.fn().mockResolvedValue(respostaVazia())

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { SemConexao } from '../api/cliente'
 import { contas, type UsuarioDaConta } from '../api/contas'
 import {
   relatorios, type ConferenciaDoCartao, type ConferenciaDoPix, type Faturamento, type FluxoDeCaixa,
@@ -9,6 +10,7 @@ import { hojeNoBalcao } from '../dataDoBalcao'
 import { hora, moeda, quantidade as numero } from '../formatos'
 import { nomesDosClientesNoAparelho } from './clientesNoAparelho'
 import { erroDeCadastro } from './erroDeCadastro'
+import { Mensagem } from './Mensagem'
 import { TituloComAjuda } from './TituloComAjuda'
 import { AJUDA } from './textosDeAjuda'
 
@@ -191,6 +193,7 @@ export function TelaDeRelatorios() {
         <button className="botao" disabled={carregando}>{carregando ? 'Consultando' : 'Consultar período'}</button>
       </form>
     </section>
+    <CartaoDoResumoMensal />
 
     {erro && <p className="mensagem-erro" role="alert">{erro}</p>}
     {!resultado && carregando && <p>Carregando relatórios...</p>}
@@ -213,6 +216,95 @@ export function TelaDeRelatorios() {
         : <p className="relatorios__sem-conferencia">As conferências do cartão e do Pix são de um dia só,
           como os extratos: escolha o mesmo dia no início e no fim.</p>}
     </div>}
+  </section>
+}
+
+const NOMES_DOS_MESES = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+]
+
+type MesFechado = { valor: string; rotulo: string }
+
+/**
+ * Os doze meses anteriores ao do balcão, o mais recente primeiro, como AAAA-MM e por extenso. O mês
+ * corrente fica de fora porque o servidor só monta o resumo de mês que já terminou.
+ */
+function mesesFechados(hoje: string): MesFechado[] {
+  const [ano, mes] = hoje.split('-').map(Number)
+  return Array.from({ length: 12 }, (_, atras) => {
+    // O Date.UTC leva o mês zero ou negativo ao ano anterior, sem passar pelo fuso do aparelho.
+    const data = new Date(Date.UTC(ano, mes - 2 - atras, 1))
+    const anoDoMes = data.getUTCFullYear()
+    const numero = data.getUTCMonth() + 1
+    return {
+      valor: `${anoDoMes}-${String(numero).padStart(2, '0')}`,
+      rotulo: `${NOMES_DOS_MESES[numero - 1]} de ${anoDoMes}`,
+    }
+  })
+}
+
+/**
+ * Salva o arquivo pelo navegador, por um link temporário com o nome dado. O endereço do arquivo é
+ * liberado um minuto depois, e não na hora: liberado logo após o clique, ele pode cancelar o
+ * download em alguns navegadores.
+ */
+function salvarArquivo(arquivo: Blob, nome: string) {
+  const endereco = URL.createObjectURL(arquivo)
+  const link = document.createElement('a')
+  link.href = endereco
+  link.download = nome
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(endereco), 60_000)
+}
+
+/**
+ * A planilha do mês (RF67): o ADMIN escolhe um dos doze meses que já terminaram e baixa o arquivo
+ * que o servidor monta, para analisar o próprio mês ou mandar ao contador. O título diz o que se
+ * baixa, e não para quem, porque os dois usos valem. Fica separada da consulta do período, porque
+ * vale para um mês inteiro e não mostra nada na tela.
+ */
+function CartaoDoResumoMensal() {
+  const [meses] = useState(() => mesesFechados(hojeNoBalcao()))
+  const [mes, setMes] = useState(meses[0].valor)
+  const [baixando, setBaixando] = useState(false)
+  const [resposta, setResposta] = useState<{ tipo: 'erro' | 'sucesso'; texto: string } | null>(null)
+
+  async function baixar(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault()
+    const escolhido = meses.find((opcao) => opcao.valor === mes) ?? meses[0]
+    setBaixando(true)
+    setResposta(null)
+    try {
+      const arquivo = await relatorios.resumoMensal(escolhido.valor)
+      salvarArquivo(arquivo, `resumo-das-vendas-${escolhido.valor}.csv`)
+      setResposta({ tipo: 'sucesso', texto: `Resumo de ${escolhido.rotulo} baixado.` })
+    } catch (falha) {
+      // O resumo é montado no servidor; sem resposta dele, não há o que guardar no aparelho.
+      const texto = falha instanceof SemConexao
+        ? 'Sem resposta do servidor. O resumo precisa de rede: tente de novo quando ela voltar.'
+        : erroDeCadastro(falha)
+      setResposta({ tipo: 'erro', texto })
+    } finally {
+      setBaixando(false)
+    }
+  }
+
+  return <section className="relatorios__cartao">
+    <h3>Resumo mensal das vendas</h3>
+    <form className="relatorios__formulario" onSubmit={baixar}>
+      <label>Mês
+        <select value={mes} onChange={(evento) => setMes(evento.target.value)}>
+          {meses.map(({ valor, rotulo }) => <option key={valor} value={valor}>{rotulo}</option>)}
+        </select>
+      </label>
+      <button className="botao" disabled={baixando}>{baixando ? 'Baixando' : 'Baixar o resumo'}</button>
+    </form>
+    <Mensagem tipo={resposta?.tipo ?? 'sucesso'} texto={resposta?.texto} />
+    <p className="relatorios__nota">Planilha com o faturamento do mês por mercadoria, serviço e forma de
+      pagamento, o fiado e as vendas canceladas.</p>
   </section>
 }
 

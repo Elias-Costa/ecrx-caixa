@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cadastro } from '../api/cadastro'
-import { ErroDaApi } from '../api/cliente'
+import { ErroDaApi, SemConexao } from '../api/cliente'
 import { contas, type UsuarioDaConta } from '../api/contas'
 import { relatorios, type Faturamento, type LancamentoEmCartao, type LancamentoEmPix } from '../api/relatorios'
 import { hojeNoBalcao } from '../dataDoBalcao'
@@ -371,5 +371,96 @@ describe('relatórios na tela', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Os relatórios fazem parte do plano Completo.')
     expect(screen.queryByRole('heading', { name: 'Faturamento' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Mais vendidos' })).not.toBeInTheDocument()
+  })
+})
+
+describe('resumo mensal das vendas', () => {
+  const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL }
+
+  afterEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', { value: originais.criar, configurable: true, writable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: originais.revogar, configurable: true, writable: true })
+  })
+
+  /** O jsdom não cria endereço de arquivo nem baixa: o teste guarda o que o link teria salvo. */
+  function simularDownload() {
+    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:resumo'), configurable: true, writable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true, writable: true })
+    const salvos: { href: string; download: string }[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      salvos.push({ href: this.href, download: this.download })
+    })
+    return salvos
+  }
+
+  function cartao(): HTMLElement {
+    return screen.getByRole('heading', { name: 'Resumo mensal das vendas' }).closest('section')!
+  }
+
+  it('lista os doze meses que já terminaram, o mais recente primeiro e escolhido, também na virada do ano', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    // Meio-dia de 10/03/2026 no balcão, que está três horas atrás do UTC.
+    vi.setSystemTime(new Date('2026-03-10T15:00:00Z'))
+    prepararApi()
+    const { unmount } = render(<TelaDeRelatorios />)
+    await esperarConsulta()
+
+    const mes = within(cartao()).getByLabelText('Mês')
+    const opcoes = within(mes).getAllByRole('option').map((opcao) => opcao.textContent)
+    expect(opcoes).toHaveLength(12)
+    expect(opcoes[0]).toBe('fevereiro de 2026')
+    expect(opcoes[1]).toBe('janeiro de 2026')
+    expect(opcoes[2]).toBe('dezembro de 2025')
+    expect(opcoes[11]).toBe('março de 2025')
+    expect(mes).toHaveValue('2026-02')
+    unmount()
+
+    // No primeiro dia do ano no balcão, o mês fechado mais recente é dezembro do ano anterior.
+    vi.setSystemTime(new Date('2026-01-01T12:00:00Z'))
+    render(<TelaDeRelatorios />)
+    await esperarConsulta()
+    expect(within(cartao()).getByLabelText('Mês')).toHaveValue('2025-12')
+  })
+
+  it('baixa o arquivo do mês escolhido com o nome dele e diz qual mês baixou', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-10T15:00:00Z'))
+    prepararApi()
+    const salvos = simularDownload()
+    let responder!: (arquivo: Blob) => void
+    const resumo = vi.spyOn(relatorios, 'resumoMensal')
+      .mockReturnValue(new Promise<Blob>((resolve) => { responder = resolve }))
+    render(<TelaDeRelatorios />)
+    await esperarConsulta()
+
+    fireEvent.change(within(cartao()).getByLabelText('Mês'), { target: { value: '2026-01' } })
+    fireEvent.click(within(cartao()).getByRole('button', { name: 'Baixar o resumo' }))
+
+    // Enquanto o servidor monta o arquivo, o botão diz o que faz e não aceita outro toque.
+    expect(await within(cartao()).findByRole('button', { name: 'Baixando' })).toBeDisabled()
+    expect(resumo).toHaveBeenCalledWith('2026-01')
+    responder(new Blob(['Resumo das vendas;01/2026']))
+
+    expect(await within(cartao()).findByRole('status')).toHaveTextContent('Resumo de janeiro de 2026 baixado.')
+    expect(salvos).toEqual([{ href: 'blob:resumo', download: 'resumo-das-vendas-2026-01.csv' }])
+    expect(within(cartao()).getByRole('button', { name: 'Baixar o resumo' })).toBeEnabled()
+  })
+
+  it('a recusa do servidor aparece como veio, e sem rede diz que o resumo precisa dela', async () => {
+    prepararApi()
+    const salvos = simularDownload()
+    const resumo = vi.spyOn(relatorios, 'resumoMensal').mockRejectedValue(new ErroDaApi(409,
+      'Recurso fora do plano', 'Os relatórios fazem parte do plano Completo.', {}))
+    render(<TelaDeRelatorios />)
+    await esperarConsulta()
+
+    fireEvent.click(within(cartao()).getByRole('button', { name: 'Baixar o resumo' }))
+    expect(await within(cartao()).findByRole('alert')).toHaveTextContent('Os relatórios fazem parte do plano Completo.')
+
+    resumo.mockRejectedValue(new SemConexao())
+    fireEvent.click(within(cartao()).getByRole('button', { name: 'Baixar o resumo' }))
+    await waitFor(() => expect(within(cartao()).getByRole('alert'))
+      .toHaveTextContent('Sem resposta do servidor. O resumo precisa de rede: tente de novo quando ela voltar.'))
+    expect(salvos).toEqual([])
   })
 })

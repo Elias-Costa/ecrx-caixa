@@ -207,4 +207,26 @@ describe('chamada sem resposta', () => {
     expect((falha as ErroDaApi).detalhe).toMatch(/cobrança Pix/)
     expect(estadoDaConexao()).toBe('com-servidor')
   })
+
+  it('a rota de arquivo devolve o conteúdo como veio, renova o token e lê a recusa em Problem Details', async () => {
+    gravarToken('token-antigo')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Resumo das vendas;10/2026', {
+      status: 200,
+      headers: { 'Content-Type': 'text/csv;charset=UTF-8', [CABECALHO_DO_TOKEN_RENOVADO]: 'token-novo' },
+    })))
+
+    const arquivo = await chamarApi<Blob>('/api/relatorios/resumo-mensal?mes=2026-10', { comoArquivo: true })
+
+    expect(await arquivo.text()).toBe('Resumo das vendas;10/2026')
+    expect(lerToken()).toBe('token-novo')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      title: 'Bad Request', detail: 'O mês 11/2026 ainda não terminou. Escolha um mês anterior.',
+    }), { status: 400, headers: { 'Content-Type': 'application/problem+json' } })))
+
+    const falha = await chamarApi<Blob>('/api/relatorios/resumo-mensal?mes=2026-11', { comoArquivo: true })
+      .catch((erro: unknown) => erro)
+    expect(falha).toBeInstanceOf(ErroDaApi)
+    expect((falha as ErroDaApi).detalhe).toBe('O mês 11/2026 ainda não terminou. Escolha um mês anterior.')
+  })
 })
