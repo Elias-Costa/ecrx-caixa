@@ -3,7 +3,7 @@ import { SemConexao } from '../api/cliente'
 import { comServidor } from '../api/conexao'
 import { vendas, type Comprovante, type ResumoDaVenda, type Venda } from '../api/vendas'
 import { lerIdentidade } from '../sessao/armazenamento'
-import { criarCaixaLocal, sessaoTemPendencia, ultimoGestoDaGaveta } from './caixaLocal'
+import { criarCaixaLocal, RecusaDeCaixaFechado, sessaoTemPendencia, ultimoGestoDaGaveta } from './caixaLocal'
 import { reais } from './dinheiro'
 import {
   enfileirarGesto, gestoAplicavel, gestoPendente, guardarRetrato, guardarRetratoDaVenda, lerRetrato,
@@ -236,7 +236,7 @@ export function criarVendaLocal(remoto: VendasDaApi = vendas, caixa: CaixaDoDisp
       }
       const sessao = await caixa.consultar(sessaoCaixaId)
       if (sessao.status !== 'ABERTA') {
-        throw new Error('Este caixa já foi fechado e não aceita venda nova; abra um caixa antes de vender.')
+        throw new RecusaDeCaixaFechado('Este caixa já foi fechado e não aceita venda nova; abra um caixa antes de vender.')
       }
       const abertura = gestos.find((gesto) => gesto.tipo === 'caixa.abrir' && gesto.registroId === sessaoCaixaId)
       const dados: raiz.DadosDoInicio = { sessaoCaixaId, criadoEm: new Date().toISOString() }

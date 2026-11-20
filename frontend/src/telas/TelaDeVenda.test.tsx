@@ -2489,3 +2489,44 @@ describe('a busca do balcão com muitos achados', () => {
     expect(nomes()).toEqual(['Mariana'])
   })
 })
+
+describe('a tela parada no caixa que outro aparelho fechou', () => {
+  const RECUSA = 'Este caixa já foi fechado e não aceita venda nova; abra um caixa antes de vender.'
+
+  it('o início recusado relê o caixa: a tela pede outro caixa e continua mostrando a recusa', async () => {
+    const abertaNoServidor = vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([])
+    vi.spyOn(cadastro, 'buscarProdutos').mockResolvedValue([{ id: 'produto-1', tipo: 'PRODUTO',
+      nome: 'Café', preco: 12.5, codigo: 'CA-1', categoria: null, unidade: 'un', atributos: {} }])
+    vi.spyOn(vendas, 'iniciar').mockRejectedValue(new ErroDaApi(409, 'Conflito', RECUSA, {}))
+    mostrar()
+
+    const busca = await screen.findByLabelText('Produto por nome ou código')
+    // O administrador fecha o caixa noutro aparelho; esta tela continua parada nele.
+    abertaNoServidor.mockResolvedValue(undefined)
+    fireEvent.change(busca, { target: { value: 'CA-1' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Café · R\$\s*12,50/ }))
+
+    expect(await screen.findByText('Abra o seu caixa para vender.')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(RECUSA)
+    expect(screen.queryByLabelText('Produto por nome ou código')).not.toBeInTheDocument()
+  })
+
+  it('a recusa que não vem do caixa não relê', async () => {
+    const abertaNoServidor = vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([])
+    vi.spyOn(cadastro, 'buscarProdutos').mockResolvedValue([{ id: 'produto-1', tipo: 'PRODUTO',
+      nome: 'Café', preco: 12.5, codigo: 'CA-1', categoria: null, unidade: 'un', atributos: {} }])
+    vi.spyOn(vendas, 'iniciar').mockRejectedValue(new ErroDaApi(400, 'Inválido', 'Pedido inválido.', {}))
+    mostrar()
+
+    const busca = await screen.findByLabelText('Produto por nome ou código')
+    const leituras = abertaNoServidor.mock.calls.length
+    fireEvent.change(busca, { target: { value: 'CA-1' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Café · R\$\s*12,50/ }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pedido inválido.')
+    expect(abertaNoServidor.mock.calls.length).toBe(leituras)
+    expect(screen.getByLabelText('Produto por nome ou código')).toBeInTheDocument()
+  })
+})

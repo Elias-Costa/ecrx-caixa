@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { EstadoDaConexao } from '../api/conexao'
@@ -39,7 +39,10 @@ export function Shell() {
   const avisoDeVencimento = useAvisoDaSessao(conexao)
   const sincronizacao = useEnvioAutomatico(identidade, sair, pathname, relerIdentidade)
   const quem = identidade ? `${identidade.contaId}:${identidade.usuarioId}` : null
-  const caixaDeOutroDia = useAvisoDoCaixaDeOutroDia(quem, sincronizacao.rodada, pathname)
+  // Conta os pedidos de releitura do caixa que as telas fazem depois de uma recusa.
+  const [releituraDoCaixa, definirReleituraDoCaixa] = useState(0)
+  const relerOCaixa = useCallback(() => definirReleituraDoCaixa((atual) => atual + 1), [])
+  const caixaDeOutroDia = useAvisoDoCaixaDeOutroDia(quem, sincronizacao.rodada, pathname, releituraDoCaixa)
   // No celular, a tela de venda fica com a barra numa linha só: com o menu em duas linhas, a busca
   // começava perto do fim da tela, onde o teclado virtual a cobre. As outras telas continuam como estão.
   const balcaoNoCelular = useCelular() && pathname === '/vender'
@@ -162,7 +165,7 @@ export function Shell() {
       <Navegacao itens={itensDoMenu(identidade)} compacta={balcaoNoCelular} />
 
       <main className="conteudo">
-        <ContextoDoShellReact.Provider value={{ definirFaixa, definirVendaAberta }}>
+        <ContextoDoShellReact.Provider value={{ definirFaixa, definirVendaAberta, relerOCaixa }}>
           <SincronizacaoContext.Provider value={sincronizacao}><Outlet /></SincronizacaoContext.Provider>
         </ContextoDoShellReact.Provider>
       </main>

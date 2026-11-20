@@ -62,6 +62,21 @@ describe('o aviso do caixa aberto desde outro dia', () => {
     await waitFor(() => expect(semRede.result.current).toBe(AVISO))
   })
 
+  it('relê quando uma tela pede, depois de uma recusa, sem trocar de tela', async () => {
+    rede(true)
+    const remoto = vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(deOntem)
+    vi.spyOn(caixa, 'consultar').mockResolvedValue({ ...deOntem, status: 'FECHADA', versao: 1,
+      fechadaEm: AGORA.toISOString(), valorFechamentoContado: 48, diferenca: 2, movimentos: [] })
+    const { result, rerender } = renderHook(({ releitura }) =>
+      useAvisoDoCaixaDeOutroDia('conta-a:ana', 0, '/vender', releitura), { initialProps: { releitura: 0 } })
+    await waitFor(() => expect(result.current).toBe(AVISO))
+
+    // O administrador fechou o caixa noutro aparelho, e a venda seguinte foi recusada.
+    remoto.mockResolvedValue(undefined)
+    rerender({ releitura: 1 })
+    await waitFor(() => expect(result.current).toBeNull())
+  })
+
   it('com o caixa aberto hoje, não aparece', async () => {
     rede(true)
     vi.spyOn(caixa, 'abertaDoOperadorAtual')

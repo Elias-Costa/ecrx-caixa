@@ -3,7 +3,7 @@ import { deleteDB } from 'idb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Produto } from '../api/cadastro'
 import { caixa, type MovimentoCaixa, type SessaoCaixa } from '../api/caixa'
-import { SemConexao, SessaoAlterada } from '../api/cliente'
+import { ErroDaApi, SemConexao, SessaoAlterada } from '../api/cliente'
 import { comServidor, registrarResposta, registrarSemResposta } from '../api/conexao'
 import type { OperacaoDoLote } from '../api/sincronizacao'
 import { vendas, type Venda } from '../api/vendas'
@@ -11,7 +11,7 @@ import { hojeNoBalcao } from '../dataDoBalcao'
 import { gravarIdentidade, gravarToken, lerToken, limparSessao } from '../sessao/armazenamento'
 import type { Identidade } from '../sessao/Identidade'
 import { tokenComExpiracao } from '../sessao/tokenDeTeste'
-import { criarCaixaLocal, mesclarSessoesLidas } from './caixaLocal'
+import { caixaPodeTerMudado, criarCaixaLocal, mesclarSessoesLidas, RecusaDeCaixaFechado } from './caixaLocal'
 import { enviarFila } from './envio'
 import { lerCaixaNoAparelho, listarGestos, type GestoNaFila } from './fila'
 import { criarVendaLocal } from './vendaLocal'
@@ -1023,7 +1023,8 @@ describe('mesclarSessoesLidas', () => {
 
   it('não troca a sessão guardada por uma leitura mais antiga', () => {
     const lida = { ...guardada, versao: 3, valorFechamentoEsperado: 99 }
-    const atual = { sessoes: [guardada], fechadasNoServidor: [], fechamentosDoAparelho: [], desatualizadas: [] }
+    const atual = { sessoes: [guardada], fechadasNoServidor: [], fechamentosDoAparelho: [], desatualizadas: [],
+      fechadasNoutroAparelho: [] }
     expect(mesclarSessoesLidas(atual, [lida], 4, ana.usuarioId)).toEqual(atual)
     expect(mesclarSessoesLidas(atual, [lida], 5, ana.usuarioId).sessoes).toEqual([{ ...lida, ordemDaLeitura: 5 }])
   })
@@ -1032,16 +1033,17 @@ describe('mesclarSessoesLidas', () => {
     const fechada = { ...guardada, versao: 2, status: 'FECHADA' as const, fechadaEm: new Date().toISOString(),
       valorFechamentoContado: 20, diferenca: 0 }
     const comFechamento = mesclarSessoesLidas({ sessoes: [guardada], fechadasNoServidor: [guardada.id],
-      fechamentosDoAparelho: [{ sessaoId: guardada.id, valorContado: 20, diferenca: 0 }], desatualizadas: [] },
+      fechamentosDoAparelho: [{ sessaoId: guardada.id, valorContado: 20, diferenca: 0 }], desatualizadas: [],
+      fechadasNoutroAparelho: [] },
     [fechada], 6, ana.usuarioId)
     expect(comFechamento).toEqual({ sessoes: [{ ...fechada, ordemDaLeitura: 6 }], fechadasNoServidor: [],
-      fechamentosDoAparelho: [], desatualizadas: [] })
+      fechamentosDoAparelho: [], desatualizadas: [], fechadasNoutroAparelho: [] })
     expect(mesclarSessoesLidas(comFechamento, [resumo(guardada)], 7, ana.usuarioId)).toEqual(comFechamento)
   })
 
   it('tira a marca de desatualizada só com a leitura da sessão pedida depois dela', () => {
     const marcada = { sessoes: [guardada], fechadasNoServidor: [], fechamentosDoAparelho: [],
-      desatualizadas: [{ sessaoId: guardada.id, ordem: 7 }] }
+      desatualizadas: [{ sessaoId: guardada.id, ordem: 7 }], fechadasNoutroAparelho: [] }
     const lida = { ...guardada, versao: 1, valorFechamentoEsperado: 25 }
     expect(mesclarSessoesLidas(marcada, [lida], 6, ana.usuarioId).desatualizadas).toEqual(marcada.desatualizadas)
     expect(mesclarSessoesLidas(marcada, [lida], 7, ana.usuarioId).desatualizadas).toEqual([])
@@ -1053,7 +1055,7 @@ describe('mesclarSessoesLidas', () => {
   it('o resumo de outra revisão substitui o extrato guardado só se a sessão estiver fechada', () => {
     const comExtrato = { ...guardada, movimentos: [movimento('VENDA', 4.9)] }
     const atual = { sessoes: [comExtrato], fechadasNoServidor: [guardada.id], fechamentosDoAparelho: [],
-      desatualizadas: [] }
+      desatualizadas: [], fechadasNoutroAparelho: [] }
     const aberta = { ...resumo(guardada), versao: 3, valorFechamentoEsperado: 30 }
     expect(mesclarSessoesLidas(atual, [aberta], 6, ana.usuarioId)).toEqual(atual)
 
@@ -1061,12 +1063,206 @@ describe('mesclarSessoesLidas', () => {
       valorFechamentoContado: 28, diferenca: 2 }
     expect(mesclarSessoesLidas(atual, [fechada], 6, ana.usuarioId)).toEqual({
       sessoes: [{ ...fechada, movimentos: undefined, ordemDaLeitura: 6 }], fechadasNoServidor: [],
-      fechamentosDoAparelho: [], desatualizadas: [] })
+      fechamentosDoAparelho: [], desatualizadas: [], fechadasNoutroAparelho: [] })
   })
 
   it('ignora a sessão de outro operador', () => {
     const deOutro = { ...abertaNoServidor(10), usuarioId: 'outra' }
-    const vazio = { sessoes: [], fechadasNoServidor: [], fechamentosDoAparelho: [], desatualizadas: [] }
+    const vazio = { sessoes: [], fechadasNoServidor: [], fechamentosDoAparelho: [], desatualizadas: [],
+      fechadasNoutroAparelho: [] }
     expect(mesclarSessoesLidas(vazio, [deOutro], 0, ana.usuarioId)).toEqual(vazio)
+  })
+})
+
+/** Uma sessão ABERTA de Ana no servidor, aberta ontem a esta hora, com o extrato completo. */
+function abertaOntem(valorAbertura: number): SessaoCaixa {
+  return { ...abertaNoServidor(valorAbertura), abertaEm: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+}
+
+/** A mesma sessão fechada agora no servidor, com falta de 2,00. */
+function fechadaAgora(sessao: SessaoCaixa): SessaoCaixa {
+  return { ...sessao, versao: (sessao.versao ?? 0) + 1, status: 'FECHADA', fechadaEm: new Date().toISOString(),
+    valorFechamentoContado: sessao.valorFechamentoEsperado - 2, diferenca: 2 }
+}
+
+/**
+ * O caixa de ontem de Ana guardado no aparelho com rede, e o servidor que passa a dizer que ela não tem caixa aberto,
+ * como depois de o administrador fechá-lo noutro aparelho. A consulta pelo id responde o que o teste mandar.
+ */
+async function caixaDeOntemFechadoFora(consultaDepois: (sessao: SessaoCaixa) => Promise<SessaoCaixa>) {
+  entrar(ana)
+  rede(true)
+  const sessao = abertaOntem(20)
+  const remoto = { ...caixa, abertaDoOperadorAtual: abertaRemota(sessao), consultar: vi.fn(async () => sessao),
+    abrir: vi.fn(async (_valor: number, id: string) => ({ id })) }
+  const local = criarCaixaLocal(remoto)
+  expect((await local.abertaDoOperadorAtual())?.id).toBe(sessao.id)
+  await local.consultar(sessao.id)
+  remoto.abertaDoOperadorAtual.mockResolvedValue(undefined)
+  remoto.consultar.mockImplementation(() => consultaDepois(sessao))
+  return { sessao, remoto, local }
+}
+
+const semResposta = async (): Promise<SessaoCaixa> => { throw new SemConexao() }
+
+describe('o caixa de outro dia fechado noutro aparelho', () => {
+  it('com rede, a marca sai na próxima pergunta pela sessão aberta, sem a pessoa abrir aquele dia', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+
+    expect(await local.abertaDoOperadorAtual()).toBeUndefined()
+    expect((await lerCaixaNoAparelho()).fechadasNoServidor).toEqual([])
+    rede(false)
+    const lida = await local.consultar(sessao.id)
+    expect(lida).toMatchObject({ status: 'FECHADA', valorFechamentoContado: 18, diferenca: 2 })
+    expect(lida.fechadaEm).not.toBeNull()
+    expect(lida.fechamentoSemValores).toBeUndefined()
+  })
+
+  it('sem resposta da leitura, a marca fica para a próxima pergunta', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(semResposta)
+    expect(await local.abertaDoOperadorAtual()).toBeUndefined()
+    expect((await lerCaixaNoAparelho()).fechadasNoServidor).toEqual([sessao.id])
+  })
+
+  it('com gesto do caixa ainda na fila, a leitura não sai, e a marca fica', async () => {
+    entrar(ana)
+    rede(true)
+    const sessao = abertaOntem(20)
+    const remoto = { ...caixa, abertaDoOperadorAtual: abertaRemota(sessao), consultar: vi.fn(async () => sessao) }
+    const local = criarCaixaLocal(remoto)
+    await local.abertaDoOperadorAtual()
+    await local.consultar(sessao.id)
+    // Uma Venda dela sem resultado: a leitura da sessão diria um esperado sem o dinheiro dela.
+    rede(false)
+    const vendasLocais = criarVendaLocal(apiDeVendas(), local)
+    const { id: vendaId } = await vendasLocais.iniciar(sessao.id)
+    await vendasLocais.adicionarItem(vendaId, cafe, 1, 0)
+
+    rede(true)
+    remoto.abertaDoOperadorAtual.mockResolvedValue(undefined)
+    remoto.consultar.mockResolvedValue(fechadaAgora(sessao))
+    await local.abertaDoOperadorAtual()
+    expect((await lerCaixaNoAparelho()).fechadasNoServidor).toEqual([sessao.id])
+    expect(remoto.consultar).toHaveBeenCalledTimes(1)
+  })
+
+  it('fica para o aviso de Meu caixa, com rede e sem, até a pessoa ver o fechamento', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+
+    await local.abertaDoOperadorAtual()
+    expect(await local.fechadoNoutroAparelho()).toMatchObject({ id: sessao.id, status: 'FECHADA', diferenca: 2 })
+    rede(false)
+    expect(await local.fechadoNoutroAparelho()).toMatchObject({ id: sessao.id, status: 'FECHADA', diferenca: 2 })
+
+    await local.dispensarAvisoDoFechamento(sessao.id)
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+  })
+
+  it('sem a leitura do fechamento, o aviso também vale, com a sessão marcada', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(semResposta)
+    await local.abertaDoOperadorAtual()
+    rede(false)
+    expect(await local.fechadoNoutroAparelho()).toMatchObject({ id: sessao.id, status: 'FECHADA',
+      fechamentoSemValores: true })
+  })
+
+  it('abrir outro caixa tira o aviso, com rede e sem', async () => {
+    const comRede = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+    await comRede.local.abertaDoOperadorAtual()
+    expect(await comRede.local.fechadoNoutroAparelho()).toBeDefined()
+    await comRede.local.abrir(10)
+    expect(await comRede.local.fechadoNoutroAparelho()).toBeUndefined()
+
+    await deleteDB('ecrx-caixa-offline')
+    const semRede = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+    await semRede.local.abertaDoOperadorAtual()
+    expect(await semRede.local.fechadoNoutroAparelho()).toBeDefined()
+    rede(false)
+    await semRede.local.abrir(10)
+    expect(await semRede.local.fechadoNoutroAparelho()).toBeUndefined()
+  })
+
+  it('a recusa de uma sangria que revela o fechamento também deixa o aviso', async () => {
+    const { sessao, remoto } = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+    const recusa = new ErroDaApi(409, 'Conflito', 'Este caixa já foi fechado e não aceita movimento.', {})
+    const comRecusa = criarCaixaLocal({ ...remoto, sangrar: vi.fn(async () => { throw recusa }) })
+    await expect(comRecusa.sangrar(sessao.id, 1, 'Retirada')).rejects.toBe(recusa)
+    expect(await comRecusa.fechadoNoutroAparelho()).toMatchObject({ id: sessao.id, status: 'FECHADA' })
+  })
+
+  it('não avisa do caixa de hoje nem do que este aparelho fechou, pela fila ou com rede', async () => {
+    entrar(ana)
+    rede(true)
+    const deHoje = abertaNoServidor(20)
+    const remoto = { ...caixa, abertaDoOperadorAtual: abertaRemota(deHoje), consultar: vi.fn(async () => deHoje),
+      fechar: vi.fn(async (_id: string, contado: number) => ({ diferenca: 30 - contado })) }
+    const local = criarCaixaLocal(remoto)
+    await local.consultar(deHoje.id)
+    remoto.abertaDoOperadorAtual.mockResolvedValue(undefined)
+    remoto.consultar.mockResolvedValue(fechadaAgora(deHoje))
+    await local.abertaDoOperadorAtual()
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+
+    // O de ontem fechado aqui sem rede, que a fila leva e o servidor confirma.
+    await deleteDB('ecrx-caixa-offline')
+    const pelaFila = abertaOntem(20)
+    remoto.abertaDoOperadorAtual.mockResolvedValue(resumo(pelaFila))
+    remoto.consultar.mockResolvedValue(pelaFila)
+    await local.abertaDoOperadorAtual()
+    await local.consultar(pelaFila.id)
+    rede(false)
+    await local.fechar(pelaFila.id, 20)
+    rede(true)
+    await enviarFila(aplicadas(1))
+    remoto.abertaDoOperadorAtual.mockResolvedValue(undefined)
+    remoto.consultar.mockResolvedValue({ ...fechadaAgora(pelaFila), valorFechamentoContado: 20, diferenca: 0 })
+    await local.abertaDoOperadorAtual()
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+
+    // O de ontem fechado aqui com rede.
+    await deleteDB('ecrx-caixa-offline')
+    const comRede = abertaOntem(30)
+    remoto.abertaDoOperadorAtual.mockResolvedValue(resumo(comRede))
+    remoto.consultar.mockResolvedValue(comRede)
+    await local.abertaDoOperadorAtual()
+    await local.consultar(comRede.id)
+    await local.fechar(comRede.id, 30)
+    remoto.abertaDoOperadorAtual.mockResolvedValue(undefined)
+    remoto.consultar.mockResolvedValue({ ...fechadaAgora(comRede), valorFechamentoContado: 30, diferenca: 0 })
+    await local.abertaDoOperadorAtual()
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+  })
+
+  it('o aviso é só da Conta e do usuário que o leram', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(async (aberta) => fechadaAgora(aberta))
+    await local.abertaDoOperadorAtual()
+    expect((await local.fechadoNoutroAparelho())?.id).toBe(sessao.id)
+
+    entrar({ ...ana, contaId: 'conta-b' })
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+    expect((await lerCaixaNoAparelho()).fechadasNoutroAparelho).toEqual([])
+    entrar({ ...ana, usuarioId: 'outra' })
+    expect(await local.fechadoNoutroAparelho()).toBeUndefined()
+    expect((await lerCaixaNoAparelho()).fechadasNoutroAparelho).toEqual([])
+    entrar(ana)
+    expect((await local.fechadoNoutroAparelho())?.id).toBe(sessao.id)
+  })
+})
+
+describe('a recusa que pede a releitura do caixa', () => {
+  it('as recusas do aparelho por caixa já fechado têm tipo próprio, e o 409 do servidor também pede releitura', async () => {
+    const { sessao, local } = await caixaDeOntemFechadoFora(semResposta)
+    await local.abertaDoOperadorAtual()
+    rede(false)
+    await expect(local.sangrar(sessao.id, 1, 'Retirada')).rejects.toBeInstanceOf(RecusaDeCaixaFechado)
+    await expect(local.fechar(sessao.id, 20)).rejects.toBeInstanceOf(RecusaDeCaixaFechado)
+    await expect(criarVendaLocal(apiDeVendas(), local).iniciar(sessao.id)).rejects.toBeInstanceOf(RecusaDeCaixaFechado)
+
+    expect(caixaPodeTerMudado(new RecusaDeCaixaFechado('Este caixa já foi fechado e não fecha de novo.'))).toBe(true)
+    expect(caixaPodeTerMudado(new ErroDaApi(409, 'Conflito', 'Este caixa já foi fechado.', {}))).toBe(true)
+    expect(caixaPodeTerMudado(new ErroDaApi(400, 'Inválido', 'Informe o motivo.', {}))).toBe(false)
+    expect(caixaPodeTerMudado(new SemConexao())).toBe(false)
+    expect(caixaPodeTerMudado(new Error('Informe o motivo da sangria.'))).toBe(false)
   })
 })

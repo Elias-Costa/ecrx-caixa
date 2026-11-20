@@ -13,7 +13,7 @@ import type {
 } from '../api/vendas'
 import { diaNoBalcao, hojeNoBalcao } from '../dataDoBalcao'
 import { contagem, dataHora, diaEMes, hora, horaNoDia, lerDinheiro, moeda, quantidadeComUnidade, valorNoCampo } from '../formatos'
-import { criarCaixaLocal } from '../offline/caixaLocal'
+import { caixaPodeTerMudado, criarCaixaLocal } from '../offline/caixaLocal'
 import { normalizarNsu, recusaDaQuantidade } from '../offline/raizDaVenda'
 import { criarVendaLocal } from '../offline/vendaLocal'
 import { useContextoDoShell } from '../shell/ContextoDoShell'
@@ -252,11 +252,13 @@ function mostrarORodape(rodape: HTMLElement | null) {
 
 export function TelaDeVenda() {
   const { identidade } = useSessao()
-  const { definirFaixa, definirVendaAberta } = useContextoDoShell()
+  const { definirFaixa, definirVendaAberta, relerOCaixa } = useContextoDoShell()
   const { rodada, vendasRecusadas } = useSincronizacao()
   const buscaRef = useRef<HTMLInputElement>(null)
   const rodapeRef = useRef<HTMLDivElement>(null)
   const [sessao, setSessao] = useState<SessaoCaixa>()
+  // Conta as releituras do caixa pedidas pela recusa do início da venda: ver lancar.
+  const [releituraDoCaixa, setReleituraDoCaixa] = useState(0)
   const [historico, setHistorico] = useState<ResumoDaVenda[]>([])
   const [conciliacoes, setConciliacoes] = useState<ConciliacaoPix[]>([])
   const [conciliacaoSelecionada, setConciliacaoSelecionada] = useState<Venda>()
@@ -382,7 +384,7 @@ export function TelaDeVenda() {
 
   // Relê também quando uma rodada de envio grava resultado: a Venda feita sem rede deixa de estar
   // pendente, e a lista precisa mostrar isso. E quando o servidor volta: sem ele, a lista era só a
-  // do aparelho.
+  // do aparelho. E quando a recusa do início da venda mostra que o caixa mudou.
   useEffect(() => {
     let vivo = true
     caixa.abertaDoOperadorAtual().then(async (aberta) => {
@@ -392,7 +394,7 @@ export function TelaDeVenda() {
     }).catch((falha) => { if (vivo) setErro({ texto: erroDeCadastro(falha), lugar: 'tela' }) })
       .finally(() => { if (vivo) setCarregando(false) })
     return () => { vivo = false }
-  }, [rodada, comServidor])
+  }, [rodada, comServidor, releituraDoCaixa])
 
   const vendaDoDispositivo = useRef<string | undefined>(undefined)
   useEffect(() => { vendaDoDispositivo.current = atual?.pendenteSincronizacao ? atual.id : undefined }, [atual])
@@ -645,6 +647,16 @@ export function TelaDeVenda() {
       buscaRef.current?.focus()
       await atualizar(id)
     } catch (falha) {
+      // Sem o id, a recusa foi do início da venda. Recusado porque o caixa não é o que a tela mostra, como o fechado
+      // noutro aparelho, o início relê o caixa e a faixa: parada, a tela diria que ele está aberto logo acima da
+      // recusa. A recusa vai para o alto da tela, que continua à vista quando a busca dá lugar a Abra o seu caixa. A
+      // recusa do item não relê: sem caixa, a tela esconderia a venda que ainda precisa ser cancelada.
+      if (id === undefined && caixaPodeTerMudado(falha)) {
+        falhar('tela', erroDeCadastro(falha) + codigosDescartados(esvaziarAFila()))
+        relerOCaixa()
+        setReleituraDoCaixa((anterior) => anterior + 1)
+        return
+      }
       // A falha para a fila: a comanda precisa ser conferida antes de seguir e, sem resposta, a leitura seguinte
       // começaria outra venda no aparelho, longe dos itens que vieram antes.
       falhar('busca', erroDaComanda(falha) + codigosDescartados(esvaziarAFila()))

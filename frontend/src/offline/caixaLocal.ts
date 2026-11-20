@@ -1,6 +1,7 @@
 import { caixa, type MovimentoCaixa, type SessaoCaixa } from '../api/caixa'
-import { SemConexao } from '../api/cliente'
+import { ErroDaApi, SemConexao } from '../api/cliente'
 import { comServidor } from '../api/conexao'
+import { hojeNoBalcao } from '../dataDoBalcao'
 import { lerIdentidade, sessaoAtual, sessaoDaAba } from '../sessao/armazenamento'
 import { centavos, centavosDoSaldo, reais } from './dinheiro'
 import {
@@ -22,6 +23,25 @@ type CaixaNoDispositivo = Omit<CaixaRemoto, 'abrir' | 'sangrar' | 'suprir' | 'fe
   fechar(id: string, valorContado: number): Promise<{ diferenca: number | null }>
   /** Para a Venda e o fiado, que escrevem com rede na gaveta: ver escreverNaGavetaComRede. */
   escreverNaGavetaComRede<T>(id: string | undefined, escrever: () => Promise<T>): Promise<T>
+  /** O caixa de um dia anterior que fechou noutro aparelho e que a pessoa ainda não viu: ver anotarFechadasNoutroAparelho. */
+  fechadoNoutroAparelho(): Promise<SessaoCaixa | undefined>
+  /** A pessoa viu o fechamento, e o aviso não volta. */
+  dispensarAvisoDoFechamento(id: string): Promise<void>
+}
+
+/**
+ * A recusa feita no aparelho porque ele já sabe que o caixa foi fechado. Tem tipo próprio porque a tela que a recebe
+ * pode estar mostrando o caixa aberto, e precisa reler; o texto é o mesmo da recusa do servidor.
+ */
+export class RecusaDeCaixaFechado extends Error {}
+
+/**
+ * A recusa que diz que o caixa não é o que a tela mostra: a do aparelho por caixa já fechado, e o 409 do servidor,
+ * que é o conflito com o estado dele. Depois dela, a tela relê o caixa de quem opera, como na troca de tela. As outras
+ * recusas, como o campo vazio ou o 400, não pedem releitura.
+ */
+export function caixaPodeTerMudado(falha: unknown): boolean {
+  return falha instanceof RecusaDeCaixaFechado || (falha instanceof ErroDaApi && falha.status === 409)
 }
 /** Cada sessão guardada leva a ordem da leitura que a trouxe, porque cada uma é lida numa hora. */
 type SessaoGuardada = SessaoCaixa & { ordemDaLeitura?: number }
@@ -156,13 +176,35 @@ export function mesclarSessoesLidas(atual: RetratoDoCaixa<SessaoGuardada>, lidas
     // A leitura ignorada acima não diz nada do que a escrita com rede mudou, e a marca fica.
     desatualizadas: atual.desatualizadas.filter((marca) =>
       !guardadasAgora.has(marca.sessaoId) || marca.ordem > ordemDaLeitura),
+    // O aviso do fechamento noutro aparelho espera a pessoa, e não a leitura: ver anotarFechadasNoutroAparelho.
+    fechadasNoutroAparelho: atual.fechadasNoutroAparelho,
   }
+}
+
+/**
+ * Anota as sessões desta pessoa abertas num dia anterior ao de hoje que o retrato atual tinha abertas e sem marca, e
+ * que o novo mostra marcadas ou fechadas, sem que este aparelho as tenha fechado: nem pela fila, com o gesto de
+ * fechamento dela, nem com rede, com os valores que a resposta devolveu. É o caixa que outro aparelho fechou. Ele
+ * some da faixa, do Vender e do histórico de hoje, que é por dia de abertura, e Meu caixa avisa dele até a pessoa ver
+ * o fechamento ou abrir outro caixa. O caixa de hoje fechado fora continua no histórico do dia, com o fechamento.
+ */
+function anotarFechadasNoutroAparelho(atual: RetratoDoCaixa<SessaoGuardada>,
+  novo: RetratoDoCaixa<SessaoGuardada>, gestos: GestoNaFila[]): RetratoDoCaixa<SessaoGuardada> {
+  const hoje = hojeNoBalcao()
+  const fechadaNoNovo = (id: string) => novo.fechadasNoServidor.includes(id)
+    || novo.sessoes.some((sessao) => sessao.id === id && sessao.status === 'FECHADA')
+  const fechadaAqui = (id: string) => atual.fechamentosDoAparelho.some((fechamento) => fechamento.sessaoId === id)
+    || gestos.some((gesto) => gesto.tipo === 'caixa.fechar' && gesto.registroId === id)
+  const novas = atual.sessoes.filter((sessao) => sessao.status === 'ABERTA'
+    && !atual.fechadasNoServidor.includes(sessao.id) && diaNoBalcao(sessao.abertaEm) < hoje
+    && fechadaNoNovo(sessao.id) && !fechadaAqui(sessao.id)).map((sessao) => sessao.id)
+  return { ...novo, fechadasNoutroAparelho: [...new Set([...novo.fechadasNoutroAparelho, ...novas])] }
 }
 
 async function guardar(sessoes: SessaoCaixa[], ordemDaLeitura: number): Promise<void> {
   const usuario = usuarioAtual()
-  await atualizarRetratoDoCaixa<SessaoGuardada>((atual) =>
-    mesclarSessoesLidas(atual, sessoes, ordemDaLeitura, usuario))
+  await atualizarRetratoDoCaixa<SessaoGuardada>((atual, gestos) => anotarFechadasNoutroAparelho(atual,
+    mesclarSessoesLidas(atual, sessoes, ordemDaLeitura, usuario), gestos))
 }
 
 /**
@@ -185,8 +227,37 @@ async function guardarSessaoAberta(recebida: SessaoCaixa | undefined, ordemDaLei
     ]
     const fechadas = new Set(mesclado.fechadasNoServidor)
     for (const id of conhecidas) if (id !== recebida?.id) fechadas.add(id)
-    return { ...mesclado, fechadasNoServidor: [...fechadas] }
+    return anotarFechadasNoutroAparelho(atual, { ...mesclado, fechadasNoServidor: [...fechadas] }, gestos)
   })
+}
+
+/**
+ * Lê pelo id, com rede, cada sessão que o servidor já disse não estar aberta: a marca sai quando o fechamento é lido,
+ * e a tela Caixa lê com rede só o dia à vista. Sem esta leitura, o caixa de outro dia ficaria marcado, sem contado
+ * nem diferença, até a pessoa abrir aquele dia com rede. A consulta não lê a sessão com gesto ainda sem resultado, e
+ * a falha deixa a marca para a próxima pergunta.
+ */
+async function lerAsMarcadas(remoto: CaixaRemoto): Promise<void> {
+  const { fechadasNoServidor } = await lerCaixaNoAparelho<SessaoGuardada>()
+  for (const id of fechadasNoServidor) {
+    try {
+      await consultarLocalOuRemoto(remoto, id)
+    } catch {
+      // A marca continua dizendo só o que o servidor já provou.
+    }
+  }
+}
+
+/**
+ * A abertura deu certo, com rede ou na fila: o aviso do caixa fechado noutro aparelho sai, para não voltar quando o
+ * caixa novo fechar. A falha aqui não desfaz a abertura, e o aviso fica até a próxima.
+ */
+async function esquecerFechadasNoutroAparelho(): Promise<void> {
+  try {
+    await atualizarRetratoDoCaixa<SessaoGuardada>((atual) => ({ ...atual, fechadasNoutroAparelho: [] }))
+  } catch {
+    // Só o aviso fica: o caixa novo já está aberto.
+  }
 }
 
 /**
@@ -379,6 +450,7 @@ export function criarCaixaLocal(remoto: CaixaRemoto = caixa): CaixaNoDispositivo
         try {
           const recebida = await lerDoServidor(() => remoto.abertaDoOperadorAtual(),
             (sessao, ordem) => guardarSessaoAberta(sessao, ordem))
+          await lerAsMarcadas(remoto)
           const gestos = await listarGestos()
           const sobreposta = (await locais()).find((sessao) => sessao.status === 'ABERTA'
             && pendente(gestosDaSessao(gestos, sessao.id)))
@@ -425,7 +497,9 @@ export function criarCaixaLocal(remoto: CaixaRemoto = caixa): CaixaNoDispositivo
       const gestos = await listarGestos()
       if (comServidor() && !algumGestoDeCaixaPendente(gestos)) {
         try {
-          return await remoto.abrir(valorAbertura, id)
+          const aberto = await remoto.abrir(valorAbertura, id)
+          await esquecerFechadasNoutroAparelho()
+          return aberto
         } catch (falha) {
           if (!(falha instanceof SemConexao)) throw falha
         }
@@ -436,6 +510,7 @@ export function criarCaixaLocal(remoto: CaixaRemoto = caixa): CaixaNoDispositivo
       const ultimo = ordenarPorDependencia(gestos.filter((gesto) => gesto.tipo.startsWith(prefixo))).at(-1)
       await enfileirar('caixa.abrir', id, { valorAbertura,
         abertaEm: new Date().toISOString() }, ultimo ? [ultimo.operacaoId] : [])
+      await esquecerFechadasNoutroAparelho()
       return { id }
     },
     async sangrar(id, valorMovimento, motivo, movimentoId?: string) {
@@ -460,7 +535,7 @@ export function criarCaixaLocal(remoto: CaixaRemoto = caixa): CaixaNoDispositivo
       if (comServidor() && (await retratos()).every((sessao) => sessao.id !== id)
         && lerIdentidade()?.perfil === 'ADMIN') return remoto.fechar(id, valorContado)
       const sessao = await local(id)
-      if (sessao.status !== 'ABERTA') throw new Error('Este caixa já foi fechado e não fecha de novo.')
+      if (sessao.status !== 'ABERTA') throw new RecusaDeCaixaFechado('Este caixa já foi fechado e não fecha de novo.')
       const gestos = gestosDaSessao(await listarGestos(), id)
       if (comServidor() && !pendente(gestos)) {
         try {
@@ -485,6 +560,20 @@ export function criarCaixaLocal(remoto: CaixaRemoto = caixa): CaixaNoDispositivo
     async escreverNaGavetaComRede<T>(id: string | undefined, escrever: () => Promise<T>) {
       return escreverNaGavetaComRede(remoto, id, escrever)
     },
+    async fechadoNoutroAparelho() {
+      // Sem armazenamento local, o aparelho não guarda caixa nenhum, nem o que fechou fora dele.
+      if (!('indexedDB' in globalThis)) return undefined
+      const { fechadasNoutroAparelho } = await lerCaixaNoAparelho<SessaoGuardada>()
+      if (fechadasNoutroAparelho.length === 0) return undefined
+      // Mais de uma é raro, e o aviso fala da última aberta; as outras continuam no histórico do dia delas.
+      return (await locais()).filter((sessao) => fechadasNoutroAparelho.includes(sessao.id))
+        .sort((uma, outra) => Date.parse(outra.abertaEm) - Date.parse(uma.abertaEm))[0]
+    },
+    async dispensarAvisoDoFechamento(id) {
+      if (!('indexedDB' in globalThis)) return
+      await atualizarRetratoDoCaixa<SessaoGuardada>((atual) => ({ ...atual,
+        fechadasNoutroAparelho: atual.fechadasNoutroAparelho.filter((outra) => outra !== id) }))
+    },
   }
 }
 
@@ -492,7 +581,7 @@ async function movimentar(remoto: CaixaRemoto, id: string, quantia: number, moti
   tipo: 'caixa.sangrar' | 'caixa.suprir', movimentoId?: string): Promise<void> {
   const cent = centavos(quantia, 'Valor do movimento')
   const sessao = await local(id)
-  if (sessao.status !== 'ABERTA') throw new Error('Este caixa já foi fechado e não aceita movimento.')
+  if (sessao.status !== 'ABERTA') throw new RecusaDeCaixaFechado('Este caixa já foi fechado e não aceita movimento.')
   if (!motivo.trim()) {
     throw new Error(tipo === 'caixa.sangrar' ? 'Informe o motivo da sangria.' : 'Informe o motivo do suprimento.')
   }

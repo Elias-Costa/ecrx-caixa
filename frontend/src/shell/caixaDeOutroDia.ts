@@ -25,10 +25,13 @@ export function avisoDoCaixaDeOutroDia(sessao: SessaoCaixa | undefined): string 
 /**
  * O aviso do caixa de quem está operando aberto desde um dia anterior. A sessão vem do caixa do
  * aparelho, que responde também sem rede, e é relida a cada troca de tela, a cada rodada da fila e na
- * volta à tela: o tablet aberto o expediente inteiro passa da meia-noite sem trocar de tela. Nada é
- * bloqueado; a venda continua na sessão aberta.
+ * volta à tela: o tablet aberto o expediente inteiro passa da meia-noite sem trocar de tela. E também
+ * quando uma tela pede, pela `releitura`, depois de uma recusa que mostrou o caixa fechado noutro
+ * aparelho: parada, a faixa diria que ele está aberto logo acima da recusa. Nada é bloqueado; a venda
+ * continua na sessão aberta.
  */
-export function useAvisoDoCaixaDeOutroDia(quem: string | null, rodada: number, caminho: string): string | null {
+export function useAvisoDoCaixaDeOutroDia(quem: string | null, rodada: number, caminho: string,
+  releitura = 0): string | null {
   const [sessao, setSessao] = useState<SessaoCaixa>()
   const [voltas, setVoltas] = useState(0)
 
@@ -45,7 +48,7 @@ export function useAvisoDoCaixaDeOutroDia(quem: string | null, rodada: number, c
       // Sem a leitura, fica o último aviso: a próxima tela tenta de novo.
       .catch(() => undefined)
     return () => { ativo = false }
-  }, [quem, rodada, caminho, voltas])
+  }, [quem, rodada, caminho, voltas, releitura])
 
   return avisoDoCaixaDeOutroDia(sessao)
 }

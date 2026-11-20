@@ -8,8 +8,9 @@ import type {
 } from '../api/vendas'
 import { abertaAntesDeHoje, diaNoBalcao, hojeNoBalcao } from '../dataDoBalcao'
 import { dataHora, diaEMes, hora, horaNoDia, lerDinheiro, moeda } from '../formatos'
-import { criarCaixaLocal } from '../offline/caixaLocal'
+import { caixaPodeTerMudado, criarCaixaLocal } from '../offline/caixaLocal'
 import { criarVendaLocal } from '../offline/vendaLocal'
+import { useContextoDoShell } from '../shell/ContextoDoShell'
 import { useSincronizacao } from '../shell/sincronizacao'
 import { useConexao } from '../shell/useConexao'
 import { apagarRascunho, chaveDoRascunho, guardarRascunho, lerRascunho } from '../sessao/rascunhos'
@@ -209,6 +210,17 @@ function extratoComSaldo(sessao: SessaoCaixa): { movimento: MovimentoCaixa; valo
 }
 
 /**
+ * O aviso de Meu caixa sobre o caixa de outro dia que fechou noutro aparelho: ele sumiu da faixa e do histórico de
+ * hoje, e quem chega só acharia o fechamento procurando o dia da abertura. Não diz quem fechou, porque o servidor não
+ * guarda isso.
+ */
+function avisoDoFechamentoNoutroAparelho(sessao: SessaoCaixa): string {
+  const abertura = new Date(sessao.abertaEm)
+  const dia = diaEMes.format(abertura)
+  return `Seu caixa aberto em ${dia} às ${hora.format(abertura)} foi fechado. Veja o fechamento no histórico de ${dia}.`
+}
+
+/**
  * Um caixa no histórico do dia: quando abriu e fechou, o valor inicial com o rótulo, para não se ler
  * como vendido, e a diferença do fechamento, que é o que se procura nele.
  */
@@ -298,12 +310,17 @@ function idDoVer(vendaId: string): string {
 export function TelaDeCaixa() {
   const { identidade } = useSessao()
   const { rodada } = useSincronizacao()
+  const { relerOCaixa } = useContextoDoShell()
   const conexao = useConexao()
   const comServidor = conexao === 'com-servidor'
   const ids = useId()
   const administrador = identidade?.perfil === 'ADMIN'
   const [aberta, setAberta] = useState<SessaoCaixa | undefined>()
+  const [fechadoNoutroAparelho, setFechadoNoutroAparelho] = useState<SessaoCaixa | undefined>()
   const [selecionada, setSelecionada] = useState<SessaoCaixa | undefined>()
+  // Ver o fechamento leva o foco ao título do caixa escolhido, e não ao começo da página, quando o botão some.
+  const tituloDoCaixa = useRef<HTMLHeadingElement>(null)
+  const focarNoTituloDoCaixa = useRef(false)
   const [historico, setHistorico] = useState<SessaoCaixa[]>([])
   const [nomes, setNomes] = useState<Map<string, string>>(() => new Map())
   const [dia, setDia] = useState(hojeNoBalcao)
@@ -358,7 +375,11 @@ export function TelaDeCaixa() {
       const [sessaoAberta, sessoesDoDia] = await Promise.all([
         caixa.abertaDoOperadorAtual(), caixa.historico(dia),
       ])
+      // Depois da pergunta pela sessão aberta, que é o que anota o caixa fechado noutro aparelho. Com um caixa
+      // aberto, Meu caixa mostra o aberto, e o aviso não tem lugar.
+      const fechadoFora = sessaoAberta ? undefined : await caixa.fechadoNoutroAparelho()
       setAberta(sessaoAberta)
+      setFechadoNoutroAparelho(fechadoFora)
       setHistorico(sessoesDoDia)
       setSelecionada((atual) => {
         if (atual) return sessoesDoDia.find((sessao) => sessao.id === atual.id)
@@ -402,6 +423,43 @@ export function TelaDeCaixa() {
     })
     return () => { ativo = false }
   }, [selecionada])
+  useEffect(() => {
+    if (!selecionada || !focarNoTituloDoCaixa.current) return
+    focarNoTituloDoCaixa.current = false
+    tituloDoCaixa.current?.focus()
+  }, [selecionada])
+
+  /** Leva ao dia do caixa fechado noutro aparelho e o abre no detalhe; o aviso sai e não volta. */
+  async function verFechamento(sessao: SessaoCaixa) {
+    focarNoTituloDoCaixa.current = true
+    setDia(diaNoBalcao(new Date(sessao.abertaEm)))
+    setSelecionada(sessao)
+    setFechadoNoutroAparelho(undefined)
+    try {
+      await caixa.dispensarAvisoDoFechamento(sessao.id)
+    } catch {
+      // Sem gravar, o aviso volta na próxima leitura da tela, e a pessoa vê o fechamento de novo.
+    }
+  }
+
+  /**
+   * A recusa mostrou que o caixa não é o que a tela via, como o fechado noutro aparelho: a tela e a faixa releem, e o
+   * caixa escolhido volta como está. Fechado, os formulários somem, e a recusa vai para o alto do cartão, como o aviso
+   * do fechamento feito aqui; parada, a tela continuaria dizendo que ele está aberto.
+   */
+  async function relerDepoisDaRecusa(sessaoId: string, lugar: LugarDaMensagem) {
+    relerOCaixa()
+    try {
+      await carregar()
+      const relida = await caixa.consultar(sessaoId)
+      setSelecionada(relida)
+      if (relida.status === 'FECHADA') {
+        setMensagem((atual) => atual?.lugar === lugar ? { ...atual, lugar: 'sessao' } : atual)
+      }
+    } catch {
+      // Sem a releitura, a recusa continua à vista, e a próxima leitura da tela traz o caixa.
+    }
+  }
 
   /**
    * Cada mudança no movimento vai também para o rascunho, ligado ao caixa selecionado. O tipo sozinho é a escolha de um
@@ -548,6 +606,7 @@ export function TelaDeCaixa() {
       setMensagem({ tipo: 'erro', lugar: 'movimento', texto: falha instanceof SemConexao
         ? 'Sem conexão. Tente registrar o mesmo movimento quando a rede voltar.'
         : erroDeCadastro(falha) })
+      if (caixaPodeTerMudado(falha)) void relerDepoisDaRecusa(selecionada.id, 'movimento')
     } finally {
       setOcupado(null)
     }
@@ -575,6 +634,7 @@ export function TelaDeCaixa() {
         noAparelho: 'Caixa fechado neste aparelho. Aguardando sincronização com o servidor.' }))
     } catch (falha) {
       setMensagem({ tipo: 'erro', texto: erroDeCadastro(falha), lugar: 'fechamento' })
+      if (caixaPodeTerMudado(falha)) void relerDepoisDaRecusa(selecionada.id, 'fechamento')
     } finally {
       setOcupado(null)
     }
@@ -611,6 +671,11 @@ export function TelaDeCaixa() {
             onClick={() => setSelecionada(aberta)}>Ver meu caixa</button>}
         </> : <form onSubmit={(evento) => void abrir(evento)}>
           <p>Nenhum caixa aberto para você.</p>
+          {fechadoNoutroAparelho && <div className="caixa__fechado-fora">
+            <p className="mensagem-alerta">{avisoDoFechamentoNoutroAparelho(fechadoNoutroAparelho)}</p>
+            <button className="botao botao--secundario" type="button"
+              onClick={() => void verFechamento(fechadoNoutroAparelho)}>Ver o fechamento</button>
+          </div>}
           <CampoDeDinheiro rotulo="Valor inicial" required placeholder="0,00" valor={valorAbertura}
             aoMudar={setValorAbertura} />
           <button className="botao" disabled={ocupado !== null}>
@@ -640,7 +705,7 @@ export function TelaDeCaixa() {
 
       {/* A chave recolhe de novo as listas abertas quando outro caixa é escolhido. */}
       {selecionada && <section className="caixa__cartao" key={selecionada.id}>
-        <h3>Caixa de {nomeDoOperador(selecionada.usuarioId)}</h3>
+        <h3 ref={tituloDoCaixa} tabIndex={-1}>Caixa de {nomeDoOperador(selecionada.usuarioId)}</h3>
         {mostrarEm('sessao')}
         {emUsoPorOutro && <p className="mensagem-alerta">
           {nomeDoOperador(selecionada.usuarioId)} está com este caixa em uso desde

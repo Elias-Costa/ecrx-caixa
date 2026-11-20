@@ -841,6 +841,9 @@ main.cadastro {
 .caixa__cartao label, .caixa__formulario { display: grid; gap: 8px; }
 .caixa__cartao label { margin-bottom: 12px; }
 .caixa__cartao input, .caixa__cartao select { max-width: 320px; }
+/* O aviso do caixa de outro dia fechado noutro aparelho, em Meu caixa: o botão dele fica separado do campo da
+   abertura, que vem logo abaixo, para não se ler como parte dela. */
+.caixa__fechado-fora { margin-bottom: var(--espaco); }
 .caixa__lista { list-style: none; padding: 0; display: grid; gap: 8px; }
 .caixa__lista .botao { text-align: left; white-space: normal; }
 /* Cada caixa do histórico em duas linhas: de quem é, e embaixo os horários e os valores. */

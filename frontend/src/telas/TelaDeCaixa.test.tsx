@@ -4,12 +4,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cadastro } from '../api/cadastro'
 import { caixa, type SessaoCaixa } from '../api/caixa'
-import { SemConexao } from '../api/cliente'
+import { ErroDaApi, SemConexao } from '../api/cliente'
 import { registrarResposta, registrarSemResposta } from '../api/conexao'
 import { contas } from '../api/contas'
 import { sincronizacao, type OperacaoDoLote } from '../api/sincronizacao'
 import { vendas, type Comprovante, type ResumoDaVenda, type Venda } from '../api/vendas'
-import { hojeNoBalcao } from '../dataDoBalcao'
+import { diaNoBalcao, hojeNoBalcao } from '../dataDoBalcao'
+import { diaEMes, hora } from '../formatos'
 import { criarCaixaLocal } from '../offline/caixaLocal'
 import { enviarFila } from '../offline/envio'
 import { gravarIdentidade, gravarToken } from '../sessao/armazenamento'
@@ -1083,5 +1084,65 @@ describe('o movimento começado, ao voltar à tela', () => {
     expect(await screen.findByRole('button', { name: 'Registrar sangria' })).toBeInTheDocument()
     expect(screen.getByLabelText('Valor')).toHaveValue('')
     expect(screen.getByLabelText('Motivo')).toHaveValue('')
+  })
+})
+
+describe('o caixa de outro dia fechado noutro aparelho', () => {
+  const abertaEm = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const deOntem: SessaoCaixa = { ...aberta, abertaEm, versao: 0, movimentos: [] }
+  const fechada: SessaoCaixa = { ...deOntem, versao: 1, status: 'FECHADA', fechadaEm: new Date().toISOString(),
+    valorFechamentoContado: 18, diferenca: 2 }
+
+  it('Meu caixa avisa do caixa de ontem fechado noutro aparelho, e Ver o fechamento leva ao dia dele', async () => {
+    const consultar = vi.spyOn(caixa, 'consultar').mockResolvedValue(deOntem)
+    const abertaNoServidor = vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(deOntem)
+    entrarComoAna()
+    const local = criarCaixaLocal()
+    await local.abertaDoOperadorAtual()
+    await local.consultar(deOntem.id)
+    // O administrador fecha o caixa noutro aparelho.
+    abertaNoServidor.mockResolvedValue(undefined)
+    consultar.mockResolvedValue(fechada)
+    const diaDeOntem = diaNoBalcao(new Date(abertaEm))
+    vi.spyOn(caixa, 'historico').mockImplementation(async (dia) => dia === diaDeOntem ? [fechada] : [])
+    mostrar()
+
+    const cartao = (await screen.findByRole('heading', { name: 'Meu caixa' })).closest('section') as HTMLElement
+    const quando = diaEMes.format(new Date(abertaEm))
+    expect(await within(cartao).findByText(`Seu caixa aberto em ${quando} às ${hora.format(new Date(abertaEm))} `
+      + `foi fechado. Veja o fechamento no histórico de ${quando}.`)).toBeInTheDocument()
+    expect(within(cartao).getByText('Nenhum caixa aberto para você.')).toBeInTheDocument()
+    fireEvent.click(within(cartao).getByRole('button', { name: 'Ver o fechamento' }))
+
+    const titulo = await screen.findByRole('heading', { name: 'Caixa de Ana' })
+    await waitFor(() => expect(titulo).toHaveFocus())
+    expect(screen.getByLabelText('Dia')).toHaveValue(diaDeOntem)
+    await waitFor(() => expect(titulo.closest('section')).toHaveTextContent('Falta de R$ 2,00'))
+    await waitFor(() => expect(within(cartao).queryByRole('button', { name: 'Ver o fechamento' }))
+      .not.toBeInTheDocument())
+  })
+
+  it('a sangria recusada porque o caixa já foi fechado relê a tela: fechado, sem formulários e com a recusa no alto do cartão', async () => {
+    const RECUSA = 'Este caixa já foi fechado e não aceita movimento: um lançamento depois do fechamento mudaria '
+      + 'a diferença já conferida.'
+    const abertaNoServidor = vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(deOntem)
+    vi.spyOn(caixa, 'historico').mockResolvedValue([])
+    const consultar = vi.spyOn(caixa, 'consultar').mockResolvedValue(deOntem)
+    vi.spyOn(caixa, 'sangrar').mockRejectedValue(new ErroDaApi(409, 'Conflito', RECUSA, {}))
+    mostrar()
+
+    expect(await screen.findByRole('button', { name: 'Registrar sangria' })).toBeInTheDocument()
+    // O administrador fecha o caixa noutro aparelho; a tela continua parada nele.
+    abertaNoServidor.mockResolvedValue(undefined)
+    consultar.mockResolvedValue(fechada)
+    fireEvent.change(screen.getByLabelText('Valor'), { target: { value: '1,00' } })
+    fireEvent.change(screen.getByLabelText('Motivo'), { target: { value: 'Troco para o banco' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar sangria' }))
+
+    const cartao = (await screen.findByRole('heading', { name: 'Caixa de Ana' })).closest('section') as HTMLElement
+    await waitFor(() => expect(cartao).toHaveTextContent('Situação: Fechado'))
+    expect(within(cartao).getByRole('alert')).toHaveTextContent(RECUSA)
+    expect(screen.queryByRole('button', { name: 'Registrar sangria' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fechar e registrar diferença' })).not.toBeInTheDocument()
   })
 })
