@@ -15,6 +15,7 @@ import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
 import br.com.caixasimples.caixa.application.SessaoCaixaService;
+import br.com.caixasimples.sincronizacao.GestoDeTeste;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
@@ -288,6 +289,64 @@ class CaixaHttpTest extends TesteDeIntegracao {
         http.perform(get("/api/caixa/sessoes/{id}", id).with(autenticador.como(contaA)))
                 .andExpect(jsonPath("$.valorAbertura").value(12.0))
                 .andExpect(jsonPath("$.status").value("ABERTA"));
+    }
+
+    /**
+     * O id do movimento vem do aparelho, e o mesmo id com o mesmo conteúdo vale como já gravado. A
+     * B manda ao próprio caixa, pela rota e pelo lote, a sangria e o suprimento com os ids e o
+     * conteúdo dos movimentos da A: a procura pelo id, filtrada pela Conta, não acha nada, e quem
+     * recusa é a chave primária, sem levar o movimento da A ao caixa da B nem dizer que ele existe.
+     */
+    @Test
+    void outraContaNaoMovimentaComOIdDeMovimentoDeOutra() throws Exception {
+        ContaCriada contaA = criador.criar("Banca A", SENHA);
+        ContaCriada contaB = criador.criar("Banca B", SENHA);
+        RequestPostProcessor daA = autenticador.como(contaA);
+        RequestPostProcessor daB = autenticador.como(contaB);
+        UUID caixaDaA = abrir(daA, "50.00");
+        UUID caixaDaB = abrir(daB, "50.00");
+        UUID suprimentoDaA = UUID.randomUUID();
+        UUID sangriaDaA = UUID.randomUUID();
+        Map<String, String> pedidos = Map.of(
+                "suprimentos", "{\"movimentoId\":\"" + suprimentoDaA
+                        + "\",\"valor\":5,\"motivo\":\"Troco\"}",
+                "sangrias", "{\"movimentoId\":\"" + sangriaDaA
+                        + "\",\"valor\":3,\"motivo\":\"Deposito\"}");
+        for (var pedido : pedidos.entrySet()) {
+            http.perform(post("/api/caixa/sessoes/{id}/" + pedido.getKey(), caixaDaA).with(daA)
+                            .contentType(MediaType.APPLICATION_JSON).content(pedido.getValue()))
+                    .andExpect(status().isNoContent());
+        }
+        String caixaDaAAntes = http.perform(get("/api/caixa/sessoes/{id}", caixaDaA).with(daA))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        for (var pedido : pedidos.entrySet()) {
+            var resposta = http.perform(post("/api/caixa/sessoes/{id}/" + pedido.getKey(),
+                            caixaDaB).with(daB).contentType(MediaType.APPLICATION_JSON)
+                            .content(pedido.getValue()))
+                    .andReturn().getResponse();
+            assertThat(resposta.getStatus()).as(pedido.getKey()).isGreaterThanOrEqualTo(400);
+            assertThat(resposta.getContentAsString()).as(pedido.getKey())
+                    .doesNotContain(suprimentoDaA.toString()).doesNotContain(sangriaDaA.toString())
+                    .doesNotContain(caixaDaA.toString()).doesNotContain("já foi registrado");
+        }
+        GestoDeTeste sangriaPeloLote = GestoDeTeste.de("caixa.sangrar", caixaDaB,
+                GestoDeTeste.conteudo("valor", new BigDecimal("3"), "motivo", "Deposito",
+                        "criadoEm", java.time.Instant.now().toString(), "movimentoId", sangriaDaA));
+        String lote = http.perform(post("/api/sincronizacao").with(daB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("operacoes",
+                                java.util.List.of(sangriaPeloLote.paraJson())))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(lote).path("resultados").get(0).path("resultado").asText())
+                .isEqualTo("NAO_APLICADA");
+        assertThat(lote).doesNotContain(caixaDaA.toString()).doesNotContain("já foi registrado");
+
+        assertThat(http.perform(get("/api/caixa/sessoes/{id}", caixaDaA).with(daA))
+                .andReturn().getResponse().getContentAsString()).isEqualTo(caixaDaAAntes);
+        http.perform(get("/api/caixa/sessoes/{id}", caixaDaB).with(daB))
+                .andExpect(jsonPath("$.movimentos.length()").value(0))
+                .andExpect(jsonPath("$.valorFechamentoEsperado").value(50.0));
     }
 
     private String movimento(String valor, String motivo) {

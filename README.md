@@ -833,7 +833,10 @@ tira a pendência da B, que não enxerga a linha, e o aceite da B grava a dela s
   suspensão da Conta têm a prova por HTTP: a Conta no plano grátis não lê os de uma paga, e a paga
   em dia não herda a suspensão de outra. O SQL do encerramento de Conta, que roda fora do filtro de
   tenant, é testado com uma linha em cada tabela da Conta nas duas pontas: a encerrada termina sem
-  nenhuma, e a outra com as mesmas, tabela a tabela. A remoção de
+  nenhuma, e a outra com as mesmas, tabela a tabela; o outbox, que não tem coluna de conta, perde só
+  o evento da encerrada, achado pela Conta no texto do evento serializado. Na restauração, as
+  remoções de Usuário reaplicadas com a Conta de um registro e o Usuário de outra não tocam ninguém.
+  A remoção de
   Cliente e a anonimização e a correção do nome de Usuário são recusadas com id de outra Conta, e o
   nome do negócio corrigido numa Conta não muda o da outra, nem a chave Pix cadastrada numa aparece
   na identidade ou na configuração da outra. A versão de acesso do
@@ -841,7 +844,9 @@ tira a pendência da B, que não enxerga a linha, e o aceite da B grava a dela s
   administrador da B não redefine a senha de um operador da A, e a troca de senha na A não derruba o
   token da B nem o de outro usuário da própria A. O lote prova por HTTP que duas Contas com os mesmos ids de
   operação recebem cada uma o seu resultado e que os ids de Produto, Venda, sessão de caixa e
-  Cliente de uma Conta, usados pela outra para criar um registro, são recusados sem alterar nada, e a
+  Cliente de uma Conta, usados pela outra para criar um registro, são recusados sem alterar nada,
+  mesmo com o conteúdo idêntico ao do Produto alheio, que uma leitura sem filtro tomaria como já
+  gravado; a edição e a inativação pelo id do Produto alheio também são recusadas, e a
   edição do Cliente numa Conta não esvazia a cópia que a outra gravou com o mesmo id.
   Os casos de uso do estoque têm o
   seu nas duas direções: a lista de estoque baixo de uma conta não traz o produto de outra, e o
@@ -863,10 +868,12 @@ tira a pendência da B, que não enxerga a linha, e o aceite da B grava a dela s
   inclusive a lista de clientes inativos, e o 404 ao tentar editar pelo id alheio. O primeiro
   acesso aplica a cada Conta uma cópia própria do catálogo sugerido.
   O caixa HTTP também prova que a Conta B não encontra a sessão da Conta A, recebe histórico vazio
-  e não deduz um caixa aberto alheio. O PDV HTTP responde 404 à Conta B que tenta abrir comanda na
+  e não deduz um caixa aberto alheio, e que a sangria e o suprimento com o id de um movimento da A,
+  pela rota ou pelo lote, são recusados sem levar o movimento ao caixa da B nem dizer que ele existe. O PDV HTTP responde 404 à Conta B que tenta abrir comanda na
   SessaoCaixa da Conta A e à Conta que tenta lançar item com produto de outra.
   O callback Pix autenticado pela configuração da Conta B não encontra o `txid` persistido na
-  Conta A; a lista de conciliação também devolve somente Vendas da Conta autenticada. O teste
+  Conta A; a lista de conciliação também devolve somente Vendas da Conta autenticada, com as duas
+  Contas tendo cada uma a sua. O teste
   HTTP de cancelamento recusa a tentativa da Conta B antes de chamar o PSP da Conta A. A Conta B
   que pede cobrança Pix com o id de uma parcela da Conta A é recusada pela chave primária, sem ler
   nem alterar a Conta A.

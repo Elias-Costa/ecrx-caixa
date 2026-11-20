@@ -303,6 +303,58 @@ class SincronizacaoHttpTest extends TesteDeIntegracao {
     }
 
     /**
+     * O Produto também nasce com o id do aparelho, e o cadastro igual com o mesmo id vale como já
+     * gravado. Por isso a B manda a criação com o id e o conteúdo exatos do Produto da A: se a leitura
+     * por chave deixasse de filtrar a Conta, a B receberia APLICADA sobre o Produto da A. A edição e a
+     * inativação com o mesmo id, sem dependência declarada, são aplicadas cada uma por si e também
+     * não o alcançam; a criação com um id novo, ao lado, mostra que a recusa vem do id.
+     */
+    @Test
+    @DisplayName("a Conta B não cria, edita nem inativa Produto com o id de um Produto da Conta A, e o da A fica como estava (RNF05)")
+    void produtoComOIdDeOutraConta() throws Exception {
+        ContaCriada contaA = criador.criar("Papelaria Leste", SENHA);
+        ContaCriada contaB = criador.criar("Papelaria Oeste", SENHA);
+        RequestPostProcessor adminA = autenticador.como(contaA);
+        RequestPostProcessor adminB = autenticador.como(contaB);
+        UUID produtoDaA = UUID.randomUUID();
+        Map<String, Object> caderno = produto("Caderno", "10.00", "CAD-1");
+        GestoDeTeste criacaoNaA = GestoDeTeste.de("produto.criar", produtoDaA, caderno);
+        assertThat(resultadoDe(enviar(adminA, List.of(criacaoNaA)), criacaoNaA)
+                .path("resultado").asText()).isEqualTo("APLICADA");
+        String produtosDaAAntes = ler(http.perform(get("/api/produtos").with(adminA))
+                .andExpect(status().isOk())).toString();
+
+        GestoDeTeste criacaoComIdDaA = GestoDeTeste.de("produto.criar", produtoDaA, caderno);
+        GestoDeTeste edicaoComIdDaA = GestoDeTeste.de("produto.editar", produtoDaA,
+                produto("Caderno trocado", "1.00", "CAD-1")).comVersaoBase(0);
+        GestoDeTeste inativacaoComIdDaA = GestoDeTeste.de("produto.inativar", produtoDaA,
+                Map.of()).comVersaoBase(0);
+        GestoDeTeste criacaoComIdNovo = GestoDeTeste.de("produto.criar", UUID.randomUUID(),
+                caderno);
+        JsonNode daB = enviar(adminB, List.of(criacaoComIdDaA, edicaoComIdDaA,
+                inativacaoComIdDaA, criacaoComIdNovo));
+
+        JsonNode recusaDaCriacao = resultadoDe(daB, criacaoComIdDaA);
+        assertThat(recusaDaCriacao.path("resultado").asText()).isEqualTo("NAO_APLICADA");
+        assertThat(recusaDaCriacao.path("detalhe").asText()).contains("conflita");
+        for (GestoDeTeste alteracao : List.of(edicaoComIdDaA, inativacaoComIdDaA)) {
+            JsonNode recusa = resultadoDe(daB, alteracao);
+            assertThat(recusa.path("resultado").asText()).as(alteracao.tipo())
+                    .isEqualTo("NAO_APLICADA");
+            assertThat(recusa.path("detalhe").asText()).as(alteracao.tipo())
+                    .isEqualTo("Produto não encontrado nesta Conta.");
+        }
+        assertThat(resultadoDe(daB, criacaoComIdNovo).path("resultado").asText())
+                .as("a mesma criação com id novo").isEqualTo("APLICADA");
+
+        assertThat(ler(http.perform(get("/api/produtos").with(adminA))).toString())
+                .isEqualTo(produtosDaAAntes);
+        http.perform(get("/api/produtos").with(adminB))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(criacaoComIdNovo.registroId().toString()));
+    }
+
+    /**
      * O cadastro e o início com rede gravaram, a resposta se perdeu, e o aparelho guardou os gestos
      * com os mesmos ids que as chamadas levaram. O lote reconhece cada registro igual sem gravar
      * outro, e o item seguinte entra na venda que a chamada abriu, sem deixar venda vazia no caixa.

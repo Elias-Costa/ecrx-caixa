@@ -195,6 +195,35 @@ class WebhookPixHttpTest extends TesteDeIntegracao {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * A conciliação lê as Vendas com Pix integrado confirmado da Conta inteira, por junção com as
+     * parcelas. Cada Conta tem a sua, e cada uma vê só a dela: uma leitura sem o filtro da Conta
+     * devolveria as duas às duas.
+     */
+    @Test
+    void conciliacoesPixNaoAtravessamConta() throws Exception {
+        Cenario daA = criar("Conciliacao A");
+        Cenario daB = criar("Conciliacao B");
+        when(gateway.consultar(any())).thenAnswer(chamada -> {
+            var cobranca = chamada.getArgument(0, br.com.caixasimples.pagamentos.domain.CobrancaPix.class);
+            return new ConsultaPix(cobranca.txid(), cobranca.chaveRecebedora(),
+                    Money.de("12.50"), true);
+        });
+        for (Cenario cenario : new Cenario[]{daA, daB}) {
+            cenario.conta.comoUsuario(() -> caixas.fechar(cenario.sessao, Money.ZERO));
+            pix.receberNotificacao(cenario.conta.contaId(), cenario.txid());
+        }
+
+        http.perform(get("/api/vendas/conciliacoes-pix").with(autenticadorHttp.como(daA.conta)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].vendaId").value(daA.venda.toString()));
+        http.perform(get("/api/vendas/conciliacoes-pix").with(autenticadorHttp.como(daB.conta)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].vendaId").value(daB.venda.toString()));
+    }
+
     @Test
     void callbacksSimultaneosNaoDuplicamBaixaDeEstoque() throws Exception {
         Cenario c = criar("Pix simultaneo");

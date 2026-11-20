@@ -9,6 +9,7 @@ import br.com.caixasimples.cadastro.application.ProdutoService;
 import br.com.caixasimples.cadastro.application.ProdutoService.DadosDoProduto;
 import br.com.caixasimples.cadastro.internal.ClienteService;
 import br.com.caixasimples.cadastro.internal.ClienteService.DadosDoCliente;
+import br.com.caixasimples.caixa.SessaoCaixaFechada;
 import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.application.PlanoService;
@@ -22,6 +23,7 @@ import br.com.caixasimples.vendas.application.VendaService;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +31,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.modulith.events.core.EventSerializer;
 import tools.jackson.databind.ObjectMapper;
 
 /** Executa o mesmo SQL do procedimento contra o PostgreSQL real do ensaio de integração. */
@@ -54,6 +57,7 @@ class EncerramentoDaContaSqlTest extends TesteDeIntegracao {
     @Autowired VendaService vendas;
     @Autowired SincronizacaoService sincronizacao;
     @Autowired ObjectMapper json;
+    @Autowired EventSerializer serializador;
 
     @Test
     void encerraUmaContaSemApagarAOutra() throws Exception {
@@ -78,6 +82,57 @@ class EncerramentoDaContaSqlTest extends TesteDeIntegracao {
         assertThat(contagens(preservada))
                 .as("a outra Conta termina com as mesmas linhas, tabela a tabela")
                 .isEqualTo(antes);
+    }
+
+    /**
+     * O outbox não tem coluna de Conta, e o encerramento acha o evento pela Conta no texto
+     * serializado. O evento é o real, serializado pelo mesmo serializador do registro de
+     * publicações, para a prova falhar se a Conta deixar de aparecer no texto. A linha nasce
+     * concluída, para nenhum reenvio a tocar durante o teste.
+     */
+    @Test
+    void encerramentoApagaSoOsEventosDaConta() throws Exception {
+        ContaCriada encerrada = criador.criar("Conta encerrada", "senha longa de teste");
+        ContaCriada preservada = criador.criar("Conta preservada", "senha longa de teste");
+        UUID daEncerrada = publicacaoDe(encerrada);
+        UUID daPreservada = publicacaoDe(preservada);
+
+        banco.execute(Files.readString(Path.of("operacao/exclusao/apagar-conta.sql"))
+                .replace("\\set ON_ERROR_STOP on", "")
+                .replace(":'conta_id'::uuid", "'" + encerrada.contaId() + "'::uuid"));
+
+        assertThat(publicacoes(daEncerrada)).as("o evento da Conta encerrada sai").isZero();
+        assertThat(publicacoes(daPreservada)).as("o da outra Conta fica").isEqualTo(1);
+    }
+
+    /**
+     * Os dois scripts do Usuário, na restauração, filtram pela Conta do registro e pelo id. O par
+     * trocado, com a Conta de uma e o Usuário da outra, não toca ninguém; o par certo alcança só o
+     * Usuário dele.
+     */
+    @Test
+    void reaplicacaoDoUsuarioNaoAlcancaOutraConta() throws Exception {
+        for (String arquivo : List.of("reaplicar-usuario.sql", "reaplicar-nome-usuario.sql")) {
+            ContaCriada daRemocao = criador.criar("Conta da remoção", "senha longa de teste");
+            ContaCriada vizinha = criador.criar("Conta vizinha", "senha longa de teste");
+            Map<String, Object> daRemocaoAntes = usuarioECredencial(daRemocao);
+            Map<String, Object> vizinhaAntes = usuarioECredencial(vizinha);
+
+            banco.execute(reaplicacao(arquivo, daRemocao, vizinha.usuarioId()));
+            assertThat(usuarioECredencial(vizinha)).as(arquivo + ", par trocado")
+                    .isEqualTo(vizinhaAntes);
+            assertThat(usuarioECredencial(daRemocao)).as(arquivo + ", par trocado")
+                    .isEqualTo(daRemocaoAntes);
+
+            banco.execute(reaplicacao(arquivo, daRemocao, daRemocao.usuarioId()));
+            assertThat(usuarioECredencial(daRemocao)).as(arquivo + ", par certo")
+                    .containsEntry("ativo", false)
+                    .containsEntry("credenciais", 0L)
+                    .containsEntry("nome", arquivo.contains("nome")
+                            ? "Usuário removido" : daRemocaoAntes.get("nome"));
+            assertThat(usuarioECredencial(vizinha)).as(arquivo + ", par certo")
+                    .isEqualTo(vizinhaAntes);
+        }
     }
 
     @Test
@@ -146,6 +201,38 @@ class EncerramentoDaContaSqlTest extends TesteDeIntegracao {
                     conta.contaId().valor()));
         }
         return porTabela;
+    }
+
+    /** Uma publicação concluída do evento do fechamento do caixa da Conta, como o registro grava. */
+    private UUID publicacaoDe(ContaCriada conta) {
+        UUID id = UUID.randomUUID();
+        Object evento = serializador.serialize(
+                new SessaoCaixaFechada(conta.contaId(), UUID.randomUUID(), Instant.now()));
+        banco.update("INSERT INTO event_publication (id, listener_id, event_type, "
+                        + "serialized_event, publication_date, completion_date, status, "
+                        + "completion_attempts) VALUES (?, ?, ?, ?, now(), now(), 'COMPLETED', 1)",
+                id, "ouvinte.do.teste", SessaoCaixaFechada.class.getName(), evento.toString());
+        return id;
+    }
+
+    private int publicacoes(UUID id) {
+        return banco.queryForObject("SELECT count(*) FROM event_publication WHERE id = ?",
+                Integer.class, id);
+    }
+
+    private static String reaplicacao(String arquivo, ContaCriada conta, UUID registro)
+            throws Exception {
+        return Files.readString(Path.of("operacao/copia/" + arquivo))
+                .replace("\\set ON_ERROR_STOP on", "")
+                .replace(":'conta_id'::uuid", "'" + conta.contaId() + "'::uuid")
+                .replace(":'registro_id'::uuid", "'" + registro + "'::uuid");
+    }
+
+    /** O nome, a situação e quantas credenciais o Usuário dono da Conta tem. */
+    private Map<String, Object> usuarioECredencial(ContaCriada conta) {
+        return banco.queryForMap("SELECT u.nome, u.ativo, (SELECT count(*) FROM credencial c "
+                + "WHERE c.usuario_id = u.id) AS credenciais FROM usuario u WHERE u.id = ?",
+                conta.usuarioId());
     }
 
     private int contarContas(ContaCriada conta) {
