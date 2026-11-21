@@ -305,7 +305,7 @@ variáveis que o compose lista para ele.
 | `ECRX_CAIXA_DB_SUPERUSUARIO_PASSWORD` | Gerada | A senha do superusuário `postgres`, que só o contêiner do banco recebe, no primeiro `initdb`. Nenhum serviço conecta com ela |
 | `ECRX_CAIXA_JWT_SECRET` | Gerada | Assinatura dos tokens, com ao menos 32 bytes. Trocá-la obriga todo mundo a entrar de novo |
 | `ECRX_CAIXA_PLANO_SECRET` | Gerado; guarde também fora da máquina | Confere o código de ativação de cada pedido de plano; ver [Pedido de plano](#pedido-de-plano-e-código-de-ativação). A aplicação não sobe sem ele |
-| `ECRX_CAIXA_MENSALIDADE_COMPLETO` | À mão, em reais, com ponto decimal | Valor dos pedidos do plano pago. A aplicação não sobe sem ela |
+| `ECRX_CAIXA_MENSALIDADE_COMPLETO` | À mão, em reais, com ponto decimal | A mensalidade do plano, o valor de cada pedido. A aplicação não sobe sem ela |
 | `ECRX_CAIXA_REMOCOES_BUCKET` e `ECRX_CAIXA_REMOCOES_AWS_*` | O bucket de remoções e a credencial que só grava nele | O registro mínimo antes de uma exclusão; ver [Remoção](#remoção-de-dados-e-encerramento-da-conta) |
 | `ECRX_CAIXA_REMOCOES_DESTINO` | `s3:<bucket de remoções>/remocoes` | O encerramento grava ali, e a restauração lê dali |
 | `ECRX_CAIXA_RESUMO_REMETENTE` | `resumo@caixa.ecrxtecnologia.com.br`, depois de a identidade estar verificada no SES | O remetente do resumo do caixa por e-mail; ver [Resumo do caixa por e-mail](#resumo-do-caixa-por-e-mail). Vazio, o resumo fica desligado |
@@ -1056,11 +1056,17 @@ suspensão é enviado quando o mesmo usuário entrar ali.
 
 ## Pedido de plano e código de ativação
 
-Toda Conta nasce no plano gratuito. O administrador pede a adesão ao Completo ou a renovação na tela
-Plano do aplicativo, manda o texto do pedido pelo canal de atendimento, o e-mail de atendimento do
-domínio, e faz o Pix do valor. O
-pedido sozinho não muda nada: o plano só vale com o código, e o código só sai depois do Pix
-conferido no extrato.
+Toda Conta nasce com 14 dias de teste do plano único. O administrador pede o pagamento na tela Plano
+do aplicativo, manda o texto do pedido pelo canal de atendimento, o e-mail de atendimento do domínio,
+e faz o Pix do valor. O pedido sozinho não muda nada: o pagamento só vale com o código, e o código só
+sai depois do Pix conferido no extrato.
+
+O tipo do pedido diz que período ele paga. A renovação, pedida no teste, num mês em dia ou nos três
+dias úteis de tolerância depois do vencimento, traz no texto o período, que começa no vencimento e
+mantém o dia dele. A adesão é o pedido da Conta já só leitura: o texto diz que o período começa no
+dia em que o código for aplicado, e esse dia passa a ser o dia do vencimento. A Conta que deve seguir
+ativa sem pagar, como a de demonstração, é renovada com um pedido dela e um código gerado aqui, como
+qualquer outra.
 
 1. Conferir no extrato o Pix com o valor do pedido, a mensalidade do dia em que ele foi feito.
 2. Gerar o código com o id, o plano e o valor do pedido:

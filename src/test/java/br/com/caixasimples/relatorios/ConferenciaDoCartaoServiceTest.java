@@ -15,8 +15,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
-import br.com.caixasimples.contas.application.RecursoForaDoPlanoException;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.relatorios.application.ConferenciaDoCartaoService;
@@ -159,7 +157,7 @@ class ConferenciaDoCartaoServiceTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("é do administrador, pede o plano com relatórios e não atravessa Contas (RNF05)")
+    @DisplayName("é do administrador, vale no teste e no só leitura, e não atravessa Contas (RNF05)")
     void permissaoPlanoEIsolamento() {
         Balcao primeira = abrirBalcao("Mercearia Aurora");
         Balcao segunda = abrirBalcao("Mercearia da Esquina");
@@ -196,9 +194,11 @@ class ConferenciaDoCartaoServiceTest extends TesteDeIntegracao {
         assertThatExceptionOfType(AcessoNegadoException.class)
                 .isThrownBy(() -> atendente.comoUsuario(() -> conferencia.doDia(DIA)));
 
-        ContaCriada gratis = criador.criar("Banca Aurora", SENHA);
-        assertThatExceptionOfType(RecursoForaDoPlanoException.class)
-                .isThrownBy(() -> gratis.comoUsuario(() -> conferencia.doDia(DIA)));
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
+        assertThat(noTeste.comoUsuario(() -> conferencia.doDia(DIA)).lancamentos()).isEmpty();
+        criador.deixarSomenteLeitura(primeira.conta().contaId());
+        assertThat(primeira.conta().comoUsuario(() -> conferencia.doDia(DIA)).lancamentos())
+                .extracting(Lancamento::vendaId).contains(daPrimeira);
     }
 
     private record Balcao(ContaCriada conta, UsuarioCriado atendenteCriada, UUID caixaDoAdmin,
@@ -222,7 +222,7 @@ class ConferenciaDoCartaoServiceTest extends TesteDeIntegracao {
 
     private Balcao abrirBalcao(String nome) {
         ContaCriada conta = criador.criar(nome, SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UsuarioCriado atendente = criador.criarOperadorEm(conta.contaId(), "Atendente");
         UUID caixaDoAdmin = conta.comoUsuario(() -> caixas.abrir(Money.ZERO));
         UUID caixaDaAtendente = atendente.comoUsuario(() -> caixas.abrir(Money.ZERO));

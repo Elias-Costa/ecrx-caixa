@@ -1,9 +1,14 @@
 export type Perfil = 'ADMIN' | 'OPERADOR'
 
+/** O gratuito só aparece na identidade guardada por uma versão anterior: o plano hoje é um só. */
 export type Plano = 'GRATIS' | 'COMPLETO'
 
-/** Onde a Conta está no ciclo mensal do plano pago, no dia de hoje do balcão. */
-export type SituacaoDoPlano = 'SEM_MENSALIDADE' | 'EM_DIA' | 'A_VENCER' | 'VENCIDO' | 'SUSPENSO'
+/**
+ * Onde a Conta está no teste ou no ciclo, no dia de hoje do balcão. Sem mensalidade e suspenso só
+ * aparecem na identidade guardada por uma versão anterior; o servidor manda os outros quatro.
+ */
+export type SituacaoDoPlano =
+  | 'SEM_MENSALIDADE' | 'EM_DIA' | 'A_VENCER' | 'VENCIDO' | 'SOMENTE_LEITURA' | 'SUSPENSO'
 
 export type RecursoDoPlano = 'RELATORIOS' | 'ESTOQUE' | 'MULTIUSUARIO' | 'PIX_INTEGRADO'
 
@@ -12,7 +17,7 @@ export type RecursoDoPlano = 'RELATORIOS' | 'ESTOQUE' | 'MULTIUSUARIO' | 'PIX_IN
  *
  * Os campos do plano são opcionais porque a identidade guardada no aparelho por uma versão
  * anterior não os tem; a abertura do aplicativo pergunta de novo ao servidor e a substitui. As
- * datas vêm como AAAA-MM-DD e faltam no plano gratuito.
+ * datas vêm como AAAA-MM-DD e faltam na identidade guardada no tempo do plano gratuito.
  */
 export type Identidade = {
   usuarioId: string
@@ -29,10 +34,17 @@ export type Identidade = {
   nsuObrigatorio?: boolean
   plano?: Plano
   situacaoDoPlano?: SituacaoDoPlano
+  /** O fim do teste ou do último período pago: o primeiro dia sem pagamento. */
   vencimentoDoPlano?: string
+  /** O primeiro dia em só leitura, se o pagamento não chegar até lá. */
   inicioDaSuspensao?: string
-  /** Os recursos pagos que valem hoje: o plano os inclui e não estão suspensos. */
+  /** Os recursos que valem hoje; no só leitura, sem o Pix integrado. */
   recursos?: RecursoDoPlano[]
+  /**
+   * Se nenhum período foi pago ainda, e o vencimento é o fim do teste. Falta na identidade guardada
+   * antes da marca, e então o aviso fala do plano, e não do teste.
+   */
+  emTeste?: boolean
   /**
    * A senha foi escolhida por outra pessoa, que a conhece, e o aplicativo só mostra a tela de troca
    * até a pessoa escolher a dela. Falta na identidade guardada antes da marca, e então não pede.
@@ -52,8 +64,7 @@ export type Identidade = {
   /** A cidade do recebedor no QR; falta junto com a chave. */
   cidadePix?: string
   /**
-   * A Conta pode cobrar pelo Pix integrado hoje: o plano o inclui, não está suspenso e o provedor
-   * está configurado. Falta na identidade guardada antes da marca, e então não oferece: o Pix manual
+   * A Conta pode cobrar pelo Pix integrado hoje: não está só leitura e o provedor está configurado. Falta na identidade guardada antes da marca, e então não oferece: o Pix manual
    * vale em todo caso.
    */
   pixIntegrado?: boolean

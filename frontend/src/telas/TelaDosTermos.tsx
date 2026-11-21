@@ -159,13 +159,18 @@ function TextoDosTermos({ aviso, fim }: PropsDoTexto) {
       no acesso seguinte e só continua depois de aceitá-la. Até lá vale a versão anterior, e os
       operadores continuam trabalhando.</p>
 
-    <h2>Planos e pagamento</h2>
-    <p>A Conta começa no plano gratuito. O plano pago tem a mensalidade mostrada na tela Plano antes
-      do pedido. O administrador faz o pedido no aplicativo, manda o texto dele pelo canal de
-      atendimento e paga por Pix; conferido o Pix, recebe um código que ativa o plano. O plano pago
-      vence todo mês no dia da adesão, com aviso sete dias antes. Sem renovação, os recursos pagos
-      continuam por sete dias depois do vencimento e param no oitavo, até a renovação; venda, caixa e
-      cadastro nunca param. O sistema ainda não emite documento fiscal.</p>
+    <h2>Plano e pagamento</h2>
+    <p>O plano é um só, com a mensalidade mostrada na tela Plano antes do pedido, e a Conta começa
+      com quatorze dias de teste dele, com tudo o que ele inclui. O administrador faz o pedido no
+      aplicativo, manda o texto dele pelo canal de atendimento e paga por Pix; conferido o Pix, recebe
+      um código que registra o pagamento. O teste vence no décimo quinto dia, com aviso três dias
+      antes, e o plano vence todo mês nesse mesmo dia, com aviso sete dias antes.</p>
+    <p>Sem o pagamento, a Conta continua funcionando por três dias úteis depois do vencimento, de
+      segunda a sexta, e no dia seguinte fica só leitura até pagar: não começa venda, não abre caixa e
+      não registra sangria, suprimento, recebimento de fiado nem cobrança Pix, mas fecha o caixa que
+      estava aberto, mostra os relatórios e mantém o cadastro. Pago nos três dias, o mês conta do
+      vencimento; pago no só leitura, o mês começa no dia em que o código é aplicado, que passa a ser
+      o dia do vencimento. O sistema ainda não emite documento fiscal.</p>
 
     <h2>Disponibilidade</h2>
     <p>O ECRX Caixa roda numa única máquina, sem redundância, e não garante funcionamento
@@ -184,7 +189,7 @@ function TextoDosTermos({ aviso, fim }: PropsDoTexto) {
       e-mail do administrador. Nesse prazo o acesso continua, para a Conta guardar o que quiser, e
       depois o encerramento segue como acima. O acesso da Conta só é suspenso na hora, com aviso ao
       administrador, em caso de uso ilegal ou de ataque ao serviço. O atraso da mensalidade não
-      encerra a Conta: só suspende os recursos pagos.</p>
+      encerra a Conta: ela fica só leitura até o pagamento.</p>
 
     <h2>Lei e foro</h2>
     <p>Estes termos seguem a lei brasileira. Fica eleito o foro do domicílio da Conta.</p>
@@ -205,7 +210,7 @@ function TextoDosTermos({ aviso, fim }: PropsDoTexto) {
     <h3>As instruções da Conta</h3>
     <p>As instruções são as funcionalidades do sistema: cadastrar produtos, Clientes e usuários;
       registrar vendas, pagamentos, fiado e recebimentos; abrir, movimentar e fechar o caixa; controlar
-      o estoque; mostrar relatórios; no plano Completo, enviar por e-mail ao administrador o resumo
+      o estoque; mostrar relatórios; enviar por e-mail ao administrador o resumo
       de cada caixa fechado, sem nome de pessoa; guardar no aparelho o que é preciso para trabalhar
       sem rede e enviar ao servidor depois; remover Clientes e usuários e encerrar a Conta, a pedido
       dela.</p>

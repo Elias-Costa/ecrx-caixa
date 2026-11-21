@@ -1,7 +1,7 @@
 package br.com.caixasimples.contas.internal;
 
 import br.com.caixasimples.shared.Perfil;
-import br.com.caixasimples.contas.Plano;
+import java.time.Instant;
 import br.com.caixasimples.shared.ContaId;
 import br.com.caixasimples.shared.TenantContext;
 import org.slf4j.Logger;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Cria uma conta com o seu usuário administrador.
+ * Cria uma conta com o seu usuário administrador, no teste de quatorze dias, como toda Conta nova.
  *
  * <p>Não existe cadastro público: as contas são criadas pelo mantenedor. Isso roda pela aplicação,
  * e não por {@code INSERT} em SQL, justamente para passar pelas mesmas regras do sistema. O hash
@@ -73,7 +73,7 @@ class SeedDeConta implements ApplicationRunner {
         // Falha antes de gravar qualquer coisa se a senha não servir.
         politica.exigirValida(propriedades.senha());
 
-        Conta conta = new Conta(propriedades.nomeNegocio(), propriedades.tipoNegocio(), Plano.GRATIS);
+        Conta conta = new Conta(propriedades.nomeNegocio(), propriedades.tipoNegocio(), Instant.now());
         ContaId contaId = conta.contaId();
         String senhaHash = encoder.encode(propriedades.senha());
 

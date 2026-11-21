@@ -217,6 +217,8 @@ public class VendaService {
      * @throws br.com.caixasimples.shared.AcessoNegadoException se a sessão é de outro operador e
      *         quem chama não é ADMIN
      * @throws CaixaFechadoParaVendaNovaException se a sessão não está ABERTA
+     * @throws br.com.caixasimples.contas.application.ContaSomenteLeituraException se a Conta está
+     *         só leitura
      */
     @Transactional
     public UUID iniciar(UUID sessaoCaixaId) {
@@ -234,6 +236,10 @@ public class VendaService {
      * receber itens, concluir ou o caixa fechar, porque o reenvio igual responde como da primeira
      * vez, e os gestos que o aparelho guardou em seguida continuam nela. O id de uma venda de outra
      * conta não aparece na consulta, e quem recusa é a chave primária.
+     *
+     * <p>A Conta só leitura recusa a venda nova pelo instante em que ela foi aberta: a que o
+     * aparelho abriu sem rede antes do só leitura passa, e as outras ficam com a recusa. O reenvio
+     * da venda já gravada não pergunta, porque ela já foi aceita.
      *
      * @return o id, o instante gravado e se a venda já estava aberta
      * @throws IllegalStateException além dos casos acima, se o id já foi usado em outro caixa ou
@@ -254,6 +260,7 @@ public class VendaService {
             }
             return new VendaIniciada(vendaId, gravada.getCriadoEm(), true);
         }
+        contas.exigirOperacao(criadoEm);
         if (!caixa.estaAberto(sessaoCaixaId)) {
             throw new CaixaFechadoParaVendaNovaException();
         }
@@ -894,9 +901,14 @@ public class VendaService {
      * O recebimento confirmado pode ser reenviado mesmo depois do fechamento da sessão, com o mesmo
      * conteúdo, NSU incluído.
      *
+     * <p>A Conta só leitura não recebe fiado novo, porque ele põe dinheiro no caixa; o reenvio do
+     * recebimento já gravado continua respondendo como da primeira vez.
+     *
      * @param nsu o NSU do comprovante da maquininha; nulo ou em branco quando não foi informado
      * @throws IllegalArgumentException se o NSU vem fora do cartão ou passa do tamanho máximo, ou
      *                                  se falta no cartão e a Conta o exige
+     * @throws br.com.caixasimples.contas.application.ContaSomenteLeituraException se o recebimento
+     *         é novo e a Conta está só leitura
      */
     @Transactional
     public RecebimentoRegistrado receberOnline(UUID vendaId, UUID recebimentoId, Money valor,
@@ -919,6 +931,7 @@ public class VendaService {
             }
             return new RecebimentoRegistrado(recebimentoId, venda.saldoDevedor(), true);
         }
+        contas.exigirOperacao(Instant.now());
         exigirNsuSeAContaExige(forma, nsuNormalizado);
         UUID sessaoId = caixa.sessaoAbertaDoOperadorAtual().orElseThrow(() ->
                 new IllegalStateException("Abra o seu caixa antes de receber fiado."));

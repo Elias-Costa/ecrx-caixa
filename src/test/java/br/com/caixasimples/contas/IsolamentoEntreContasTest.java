@@ -7,6 +7,7 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.application.AutenticacaoService;
 import br.com.caixasimples.contas.application.ContaService;
+import br.com.caixasimples.contas.application.ContaSomenteLeituraException;
 import br.com.caixasimples.contas.application.PedidoDePlanoNaoEncontradoException;
 import br.com.caixasimples.contas.application.PlanoService;
 import br.com.caixasimples.contas.application.PlanoService.EstadoDoPlano;
@@ -26,6 +27,7 @@ import br.com.caixasimples.contas.internal.Usuario;
 import br.com.caixasimples.contas.internal.UsuarioRepository;
 import br.com.caixasimples.shared.Perfil;
 import br.com.caixasimples.shared.TenantContext;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -134,13 +136,13 @@ class IsolamentoEntreContasTest extends TesteDeIntegracao {
             assertThat(planos.consultar().pedidoAberto()).isNull();
             assertThatExceptionOfType(PedidoDePlanoNaoEncontradoException.class)
                     .isThrownBy(() -> planos.aplicarCodigo(pedidoDeA, codigoDeA));
-            assertThat(planos.consultar().plano()).isEqualTo(Plano.GRATIS);
+            assertThat(planos.consultar().emTeste()).isTrue();
         });
 
         contaA.comoUsuario(() -> {
             assertThat(pedidos.findById(pedidoDeA)).isPresent();
-            assertThat(planos.consultar().plano()).as("o código não foi gasto pela outra conta")
-                    .isEqualTo(Plano.GRATIS);
+            assertThat(planos.consultar().emTeste()).as("o código não foi gasto pela outra conta")
+                    .isTrue();
         });
 
         // A conta B pede o próprio plano: o pedido dela não substitui o aberto da A nem colide com
@@ -152,14 +154,31 @@ class IsolamentoEntreContasTest extends TesteDeIntegracao {
                     .as("o aberto da conta A continua o mesmo")
                     .extracting(PedidoNaConta::id)
                     .isEqualTo(pedidoDeA);
-            assertThat(planos.aplicarCodigo(pedidoDeA, codigoDeA).plano())
-                    .isEqualTo(Plano.COMPLETO);
+            assertThat(planos.aplicarCodigo(pedidoDeA, codigoDeA).emTeste()).isFalse();
         });
         contaB.comoUsuario(() -> {
             EstadoDoPlano estadoDeB = planos.consultar();
-            assertThat(estadoDeB.plano()).isEqualTo(Plano.GRATIS);
+            assertThat(estadoDeB.emTeste()).isTrue();
             assertThat(estadoDeB.pedidoAberto()).extracting(PedidoNaConta::id)
                     .isEqualTo(pedidoDeB);
+        });
+    }
+
+    @Test
+    @DisplayName("o só leitura da conta A não alcança a conta B, nem a B em teste tira a A do só leitura (RNF05)")
+    void somenteLeituraNaoAtravessaContas() {
+        ContaCriada contaA = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
+        ContaCriada contaB = criador.criar("Salao Vizinho", SENHA_DE_TESTE);
+        criador.deixarSomenteLeitura(contaA.contaId());
+
+        contaB.comoUsuario(() -> {
+            contaService.exigirOperacao(Instant.now());
+            assertThat(planos.consultar().situacao()).isEqualTo(SituacaoDoPlano.EM_DIA);
+        });
+        contaA.comoUsuario(() -> {
+            assertThatExceptionOfType(ContaSomenteLeituraException.class)
+                    .isThrownBy(() -> contaService.exigirOperacao(Instant.now()));
+            assertThat(planos.consultar().situacao()).isEqualTo(SituacaoDoPlano.SOMENTE_LEITURA);
         });
     }
 

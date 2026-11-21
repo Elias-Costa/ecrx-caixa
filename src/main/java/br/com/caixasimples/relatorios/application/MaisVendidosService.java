@@ -1,7 +1,5 @@
 package br.com.caixasimples.relatorios.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
-import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.relatorios.internal.ItemVendaParaRelatorioRepository;
 import br.com.caixasimples.relatorios.internal.ProdutoVendido;
 import br.com.caixasimples.shared.Money;
@@ -43,19 +41,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><strong>É relatório do administrador (RF30)</strong>, inclusive quando filtrado por um
  * operador: o operador não lê o ranking, nem o próprio. A pergunta é feita uma vez, no método
  * privado em que as duas sobrecargas desembocam.
- *
- * <p>Depois do perfil, o plano: relatório é recurso pago, recusado no plano gratuito e com
- * os recursos pagos suspensos.
  */
 @Service
 public class MaisVendidosService {
 
     private final ItemVendaParaRelatorioRepository itens;
-    private final ContaService contas;
 
-    MaisVendidosService(ItemVendaParaRelatorioRepository itens, ContaService contas) {
+    MaisVendidosService(ItemVendaParaRelatorioRepository itens) {
         this.itens = itens;
-        this.contas = contas;
     }
 
     /**
@@ -114,7 +107,6 @@ public class MaisVendidosService {
     private MaisVendidos consultar(LocalDate inicio, LocalDate fim, int limite,
             OrdemDoRanking ordem, UUID operadorId) {
         UsuarioContext.exigirAdmin();
-        contas.exigirRecurso(RecursoDoPlano.RELATORIOS);
         Objects.requireNonNull(ordem,
                 "ordem não pode ser nula; diga se o ranking é pela quantidade ou pelo valor");
         Periodo periodo = new Periodo(inicio, fim);

@@ -15,9 +15,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
-import br.com.caixasimples.contas.application.PlanoSuspensoException;
-import br.com.caixasimples.contas.application.RecursoForaDoPlanoException;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.relatorios.application.ResumoMensalService;
@@ -55,7 +52,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * <p>O que se prova: mercadoria mais serviço e a soma das formas fecham com o faturamento, com o
  * desconto da venda repartido; o mês corta no fuso do balcão; a cancelada conta pela conclusão e o
- * recebimento pelo dia dele; só mês fechado, só administrador, só plano pago em dia; e cada Conta
+ * recebimento pelo dia dele; só mês fechado e só administrador, no teste e no só leitura; e cada Conta
  * lê só as próprias vendas (RNF05).
  */
 class ResumoMensalServiceTest extends TesteDeIntegracao {
@@ -144,7 +141,7 @@ class ResumoMensalServiceTest extends TesteDeIntegracao {
     @DisplayName("o mês corrente e os seguintes são recusados com a frase da tela; mês sem venda dá zero")
     void soMesQueJaTerminou() {
         ContaCriada conta = criador.criar("Mercearia da Rua", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         YearMonth atual = YearMonth.now(FusoDeReferencia.DO_BALCAO);
 
         conta.comoUsuario(() -> {
@@ -166,23 +163,20 @@ class ResumoMensalServiceTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("é do administrador e de plano pago em dia, como os outros relatórios (RF30)")
-    void soAdministradorComPlanoPagoEmDia() {
+    @DisplayName("é do administrador, como os outros relatórios (RF30), e vale no teste e no só leitura")
+    void soAdministradorNoTesteENoSomenteLeitura() {
         ContaCriada conta = criador.criar("Loja com Atendente", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");
         assertThatExceptionOfType(AcessoNegadoException.class)
                 .isThrownBy(() -> operador.comoUsuario(() -> resumo.doMes(MES)));
 
-        ContaCriada gratis = criador.criar("Banca Aurora", SENHA);
-        assertThatExceptionOfType(RecursoForaDoPlanoException.class)
-                .isThrownBy(() -> gratis.comoUsuario(() -> resumo.doMes(MES)));
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
+        assertThat(noTeste.comoUsuario(() -> resumo.doMes(MES))).isNotNull();
 
-        ContaCriada suspensa = criador.criar("Loja Suspensa", SENHA);
-        criador.contratar(suspensa.contaId(), Plano.COMPLETO);
-        criador.vencerPlano(suspensa.contaId(), 8);
-        assertThatExceptionOfType(PlanoSuspensoException.class)
-                .isThrownBy(() -> suspensa.comoUsuario(() -> resumo.doMes(MES)));
+        ContaCriada somenteLeitura = criador.criar("Loja sem Pagamento", SENHA);
+        criador.deixarSomenteLeitura(somenteLeitura.contaId());
+        assertThat(somenteLeitura.comoUsuario(() -> resumo.doMes(MES))).isNotNull();
     }
 
     @Test
@@ -191,7 +185,7 @@ class ResumoMensalServiceTest extends TesteDeIntegracao {
         Balcao balcaoA = abrirBalcao("Loja A");
         Balcao balcaoB = abrirBalcao("Loja B");
         ContaCriada contaC = criador.criar("Loja C", SENHA);
-        criador.contratar(contaC.contaId(), Plano.COMPLETO);
+        criador.contratar(contaC.contaId());
         preencherMes(balcaoA);
         Instant dia20 = noBalcao(MES.atDay(20), LocalTime.NOON);
         ItemVenda daB = new ItemVenda(UUID.randomUUID(), balcaoB.servicoId(), BigDecimal.ONE,
@@ -330,7 +324,7 @@ class ResumoMensalServiceTest extends TesteDeIntegracao {
      */
     private Balcao abrirBalcao(String nome) {
         ContaCriada conta = criador.criar(nome, SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         return conta.comoUsuario(() -> {
             UUID caixaId = caixas.abrir(Money.ZERO);
             UUID mercadoriaId = produtos.cadastrar(TipoProduto.PRODUTO, new DadosDoProduto(

@@ -14,7 +14,6 @@ import br.com.caixasimples.caixa.domain.MovimentoCaixa;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.relatorios.application.FluxoDeCaixaService;
 import br.com.caixasimples.relatorios.application.FluxoDeCaixaService.FluxoDeCaixa;
 import br.com.caixasimples.shared.AcessoNegadoException;
@@ -75,7 +74,7 @@ class FluxoDeCaixaServiceTest extends TesteDeIntegracao {
     @DisplayName("soma os quatro tipos de todas as sessões do dia, e o dia é o do lançamento no fuso do balcão")
     void somaOsQuatroTiposNoDiaDoLancamento() {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID vendaDaManha = cenario.venda();
         UUID vendaDaTarde = cenario.venda();
@@ -135,7 +134,7 @@ class FluxoDeCaixaServiceTest extends TesteDeIntegracao {
     @DisplayName("o operador não lê o fluxo de caixa: é relatório do administrador (RF30)")
     void operadorNaoLeOFluxo() {
         ContaCriada conta = criador.criar("Mercearia com Atendente", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");
 
         assertThatExceptionOfType(AcessoNegadoException.class)
@@ -146,7 +145,7 @@ class FluxoDeCaixaServiceTest extends TesteDeIntegracao {
     @DisplayName("período sem movimento devolve tudo zero, nunca nulo; período invertido é recusado")
     void periodoSemMovimentoEPeriodoInvertido() {
         ContaCriada conta = criador.criar("Mercearia da Rua", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
 
         FluxoDeCaixa vazio = conta.comoUsuario(
                 () -> fluxo.doPeriodo(DIA, DIA));
@@ -164,11 +163,11 @@ class FluxoDeCaixaServiceTest extends TesteDeIntegracao {
     @DisplayName("duas contas com movimentos no mesmo dia recebem cada uma só o seu fluxo (RNF05)")
     void contasComDadosEquivalentesRecebemResultadosDistintos() {
         ContaCriada contaA = criador.criar("Loja A", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja B", SENHA_DE_TESTE);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         ContaCriada contaC = criador.criar("Loja C", SENHA_DE_TESTE);
-        criador.contratar(contaC.contaId(), Plano.COMPLETO);
+        criador.contratar(contaC.contaId());
 
         sessao(contaA, noBalcao(DIA, LocalTime.of(8, 0)), List.of(
                 lancado(TipoMovimentoCaixa.SUPRIMENTO, Money.de("10.00"), "troco",

@@ -3,34 +3,23 @@ package br.com.caixasimples.contas;
 /**
  * Plano contratado pela conta.
  *
- * <p>Dois planos: o gratuito, sem mensalidade, e o completo, com todos os recursos pagos. O valor da
+ * <p>O plano é um só, o completo, com mensalidade, e toda Conta começa num teste dele. O valor da
  * mensalidade vem do ambiente, não do código.
  */
 public enum Plano {
 
-    /** Um usuário: cadastro, vendas e caixa básico. Sem mensalidade. */
+    /**
+     * Não é plano de Conta nenhuma, e o banco recusa a Conta nele. Continua aqui porque o aplicativo
+     * instalado antes pode mandá-lo num pedido de plano, que é recusado com uma frase, e não com um
+     * erro de leitura do pedido.
+     */
     GRATIS,
 
     /**
-     * Tudo do grátis, mais relatórios completos, estoque, multiusuário, Pix integrado e suporte
-     * prioritário. A emissão fiscal ainda não existe, e a tela avisa isso antes de a Conta pedir o
-     * plano.
+     * Cadastro, vendas, caixa, relatórios, estoque, multiusuário e Pix integrado. A emissão fiscal
+     * ainda não existe, e a tela do plano avisa isso.
      */
     COMPLETO;
-
-    /**
-     * Se o plano dá direito ao recurso. O direito pode estar suspenso por falta de renovação; quem
-     * responde se ele vale hoje é a Conta, que conhece o vencimento.
-     *
-     * <p>Multiusuário é um sim ou não, e não um número, porque a diferença entre os planos é
-     * exatamente essa: um usuário ou vários. Um limite numérico por plano seria inventar tabela que
-     * o produto não definiu.
-     */
-    public boolean inclui(RecursoDoPlano recurso) {
-        return switch (recurso) {
-            case RELATORIOS, ESTOQUE, MULTIUSUARIO, PIX_INTEGRADO -> this == COMPLETO;
-        };
-    }
 
     /** Como o plano aparece nas mensagens a quem usa o sistema. */
     public String nomeExibido() {

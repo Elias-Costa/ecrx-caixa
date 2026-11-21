@@ -184,7 +184,7 @@ export function TelaDeUsuarios() {
 
   return <section className="cadastro">
     <TituloComAjuda titulo="Usuários" ajuda={AJUDA.usuarios} />
-    <p>Crie acessos para quem trabalha nesta Conta. O plano Completo permite mais de um usuário.</p>
+    <p>Crie acessos para quem trabalha nesta Conta.</p>
     {mostrarEm('lista')}
 
     <form className="cadastro__formulario" onSubmit={(evento) => void criar(evento)}>

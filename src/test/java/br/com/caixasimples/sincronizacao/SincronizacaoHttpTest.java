@@ -12,7 +12,6 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Perfil;
 import java.math.BigDecimal;
@@ -54,7 +53,7 @@ class SincronizacaoHttpTest extends TesteDeIntegracao {
     @DisplayName("um dia inteiro sem rede num lote: ids e instantes do balcão, sangria que só cabe com a Venda")
     void diaInteiroSemRedeNumLote() throws Exception {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         DiaSemRede dia = new DiaSemRede();
 
@@ -552,7 +551,7 @@ class SincronizacaoHttpTest extends TesteDeIntegracao {
     @DisplayName("abertura e sangria com rede que ficaram sem resposta, repetidas pelo lote com os mesmos ids, valem uma vez")
     void chamadaSemRespostaRepetidaPeloLote() throws Exception {
         ContaCriada conta = criador.criar("Mercadinho Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         UUID sessaoId = UUID.randomUUID();
         UUID movimentoId = UUID.randomUUID();

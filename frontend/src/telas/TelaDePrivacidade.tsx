@@ -12,7 +12,7 @@ import { VoltarDaPaginaPublica } from './VoltarDaPaginaPublica'
 export function TelaDePrivacidade() {
   return <main className="cadastro">
     <h1>Aviso de privacidade</h1>
-    <p className="cadastro__apoio">Versão de 19/11/2026. Diz como o ECRX Caixa trata os dados
+    <p className="cadastro__apoio">Versão de 20/11/2026. Diz como o ECRX Caixa trata os dados
       pessoais de quem usa o sistema e de quem aparece nele, conforme a Lei Geral de Proteção de Dados
       (LGPD).</p>
 
@@ -53,7 +53,7 @@ export function TelaDePrivacidade() {
         sistema.</li>
       <li><strong>Administrador e Conta:</strong> nome e tipo do negócio, plano e vencimento; nome,
         e-mail de acesso e senha do administrador; o aceite dos termos e os pedidos de plano, para
-        executar o contrato. No plano Completo, o e-mail de cada administrador ativo também recebe o
+        executar o contrato. O e-mail de cada administrador ativo também recebe o
         resumo de cada caixa fechado, com valores e nomes de produto, sem nome de pessoa.</li>
       <li><strong>Pix:</strong> a chave Pix da Conta, que pode ser o CPF, o telefone ou o e-mail do
         dono, e a cidade do recebedor, que o aparelho põe, com o nome do negócio, no QR do Pix manual,

@@ -1,7 +1,5 @@
 package br.com.caixasimples.relatorios.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
-import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.relatorios.application.FaturamentoService.Faturamento;
 import br.com.caixasimples.relatorios.application.FaturamentoService.Filtros;
@@ -55,8 +53,8 @@ import org.springframework.transaction.annotation.Transactional;
  * possível porque o caixa aberto no mês anterior ainda aceita cancelar, faria as formas não somarem
  * o total. Em leitura repetível todas leem o mesmo retrato, e só leem.
  *
- * <p>É relatório do administrador e de plano pago, como os outros (RF30): as duas perguntas vêm
- * antes de qualquer consulta. A conta vem sempre do contexto (RNF05).
+ * <p>É relatório do administrador, como os outros (RF30): a pergunta vem antes de qualquer
+ * consulta. A conta vem sempre do contexto (RNF05).
  */
 @Service
 public class ResumoMensalService {
@@ -64,14 +62,12 @@ public class ResumoMensalService {
     private final FaturamentoService faturamento;
     private final VendaParaRelatorioRepository vendas;
     private final ItemVendaParaRelatorioRepository itens;
-    private final ContaService contas;
 
     ResumoMensalService(FaturamentoService faturamento, VendaParaRelatorioRepository vendas,
-            ItemVendaParaRelatorioRepository itens, ContaService contas) {
+            ItemVendaParaRelatorioRepository itens) {
         this.faturamento = faturamento;
         this.vendas = vendas;
         this.itens = itens;
-        this.contas = contas;
     }
 
     /**
@@ -83,7 +79,6 @@ public class ResumoMensalService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ResumoMensal doMes(YearMonth mes) {
         UsuarioContext.exigirAdmin();
-        contas.exigirRecurso(RecursoDoPlano.RELATORIOS);
         Objects.requireNonNull(mes, "mes nao pode ser nulo");
         if (!mes.isBefore(YearMonth.now(FusoDeReferencia.DO_BALCAO))) {
             throw new IllegalArgumentException("O mês " + FormatoDeTela.mes(mes)

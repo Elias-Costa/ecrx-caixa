@@ -468,8 +468,8 @@ public class AutenticacaoService {
      *
      * <p>A chave Pix e a cidade vêm junto porque todo aparelho da Conta monta o QR do Pix manual,
      * inclusive sem rede, e a chave é a que o cliente já vê no QR. A marca do Pix integrado diz se a
-     * Conta pode cobrar por ele hoje: o plano o inclui, os recursos pagos não estão suspensos e o
-     * provedor da Conta está configurado, o que é feito à parte do plano. Sem ela, o aplicativo
+     * Conta pode cobrar por ele hoje: a Conta não está só leitura e o provedor dela está
+     * configurado, o que é feito à parte do plano. Sem ela, o aplicativo
      * mostraria um botão que só responde erro.
      *
      * <p>Aqui a transação pode existir, ao contrário do login: o tenant já está no contexto
@@ -495,15 +495,15 @@ public class AutenticacaoService {
         boolean senhaProvisoria = credencialDe(usuario.getId(), contaId).isSenhaProvisoria();
 
         LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
-        boolean pixIntegrado = conta.temRecurso(RecursoDoPlano.PIX_INTEGRADO, hoje)
+        boolean pixIntegrado = conta.recursos(hoje).contains(RecursoDoPlano.PIX_INTEGRADO)
                 && pix.configurada();
         return new Identidade(usuario.getId(), usuario.getNome(), atual.perfil(),
                 conta.getId(), conta.getNomeNegocio(), conta.getTipoNegocio(),
                 conta.isEstoqueHabilitado(), conta.isNsuObrigatorio(), conta.getPlano(),
                 conta.situacao(hoje),
-                conta.getProximoVencimento(), conta.inicioDaSuspensao(), conta.recursos(hoje),
+                conta.getProximoVencimento(), conta.inicioDoSomenteLeitura(), conta.recursos(hoje),
                 senhaProvisoria, termos.pendentes(), conta.getChavePix(), conta.getCidadePix(),
-                pixIntegrado);
+                pixIntegrado, conta.isEmTeste());
     }
 
     /**
@@ -511,9 +511,8 @@ public class AutenticacaoService {
      *
      * @param tipoNegocio       nulo quando a conta foi criada sem tipo, e então não há catálogo
      *                          inicial a oferecer
-     * @param vencimentoDoPlano nulo no plano gratuito
-     * @param inicioDaSuspensao o primeiro dia sem os recursos pagos se não houver renovação; nulo
-     *                          no plano gratuito
+     * @param vencimentoDoPlano o fim do teste ou do último período pago
+     * @param inicioDaSuspensao o primeiro dia em só leitura se o pagamento não chegar
      * @param nsuObrigatorio    se o pagamento em cartão exige o NSU; o aparelho guarda o valor
      *                          para recusar a parcela sem ele antes de gravá-la sem rede
      * @param recursos          os recursos do plano que valem hoje
@@ -524,12 +523,14 @@ public class AutenticacaoService {
      *                          cadastra uma, e então o Pix manual é lançado sem QR
      * @param cidadePix         a cidade do recebedor no QR; nula junto com a chave
      * @param pixIntegrado      se a Conta pode cobrar pelo Pix integrado hoje
+     * @param emTeste           se nenhum período foi pago ainda
      */
     public record Identidade(UUID usuarioId, String nome, Perfil perfil, UUID contaId,
             String nomeNegocio, String tipoNegocio, boolean estoqueHabilitado,
             boolean nsuObrigatorio, Plano plano,
             SituacaoDoPlano situacaoDoPlano, LocalDate vencimentoDoPlano,
             LocalDate inicioDaSuspensao, Set<RecursoDoPlano> recursos, boolean senhaProvisoria,
-            boolean termosPendentes, String chavePix, String cidadePix, boolean pixIntegrado) {
+            boolean termosPendentes, String chavePix, String cidadePix, boolean pixIntegrado,
+            boolean emTeste) {
     }
 }

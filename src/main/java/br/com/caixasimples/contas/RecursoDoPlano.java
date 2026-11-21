@@ -1,12 +1,12 @@
 package br.com.caixasimples.contas;
 
 /**
- * O que um plano pago libera além do caixa básico. Cadastro, Venda, caixa e a baixa de estoque
- * pela Venda não estão aqui: continuam funcionando em qualquer plano, inclusive suspenso, para
- * não interromper o balcão nem corromper o saldo.
+ * Os recursos que a identidade lista para o aplicativo decidir o que mostrar no menu e na venda.
  *
- * <p>Os módulos donos perguntam pelo recurso depois do perfil e antes da própria regra, de modo
- * que o operador recebe a recusa de perfil, e a Conta sem o recurso, a recusa do plano.
+ * <p>Com um plano só, todos valem, no teste e nos períodos pagos. No só leitura sai só o Pix
+ * integrado, porque a cobrança nova é recusada; relatórios, estoque e usuários continuam, porque não
+ * põem nem tiram dinheiro do balcão. A lista existe porque o aplicativo instalado antes a lê para
+ * montar o menu.
  */
 public enum RecursoDoPlano {
 
@@ -16,14 +16,13 @@ public enum RecursoDoPlano {
     /** Ajuste, estoque mínimo e consulta de saldo, e ligar o controle de estoque (RF17, RF19, RF20). */
     ESTOQUE,
 
-    /** Criar mais usuários na Conta (RF29). Os que já existem continuam entrando. */
+    /** Criar mais usuários na Conta (RF29). */
     MULTIUSUARIO,
 
     /**
-     * Cobrar pelo Pix integrado ao provedor, confirmado sem o operador conferir o extrato (RF27). O
-     * Pix lançado à mão vale em qualquer plano; a cobrança integrada já reservada continua sendo
-     * consultada e confirmada depois que o recurso deixa de valer, porque o cliente pode estar
-     * pagando.
+     * Cobrar pelo Pix integrado ao provedor, confirmado sem o operador conferir o extrato (RF27). A
+     * cobrança já reservada continua sendo consultada e confirmada no só leitura, porque o cliente
+     * pode estar pagando.
      */
     PIX_INTEGRADO
 }

@@ -59,8 +59,8 @@ export const AJUDA = {
     'A chave Pix gera o QR do Pix lançado à mão.',
   ],
   plano: [
-    'O plano atual, o vencimento e o que cada plano inclui.',
-    'Para contratar ou renovar, faça o pedido e pague pelo Pix.',
-    'O código recebido depois da conferência do pagamento ativa o plano.',
+    'O plano, o teste ou o vencimento, e o que o plano inclui.',
+    'Para pagar, faça o pedido e pague pelo Pix.',
+    'O código recebido depois da conferência do pagamento registra o pagamento.',
   ],
 } as const satisfies Record<string, readonly string[]>

@@ -144,7 +144,8 @@ class AutenticacaoController {
                 identidade.termosPendentes(),
                 identidade.chavePix(),
                 identidade.cidadePix(),
-                identidade.pixIntegrado());
+                identidade.pixIntegrado(),
+                identidade.emTeste());
     }
 
     /**
@@ -197,21 +198,24 @@ class AutenticacaoController {
 
     /**
      * @param tipoNegocio       omitido no JSON quando a conta não tem tipo
-     * @param vencimentoDoPlano omitido no plano gratuito
-     * @param inicioDaSuspensao omitido no plano gratuito
+     * @param vencimentoDoPlano o fim do teste ou do último período pago
+     * @param inicioDaSuspensao o primeiro dia em só leitura se o pagamento não chegar, no campo com
+     *                          o nome que o aparelho antigo já lê
      * @param senhaProvisoria   verdadeiro enquanto a senha for a que outra pessoa escolheu
      * @param termosPendentes   verdadeiro enquanto a Conta não aceitou a versão vigente dos termos
      * @param chavePix          omitida enquanto a Conta não tem chave; o aparelho antigo não lê
      * @param cidadePix         omitida junto com a chave
      * @param pixIntegrado      verdadeiro quando a Conta pode cobrar pelo Pix integrado hoje; o
      *                          aparelho antigo não lê e continua oferecendo a cobrança, que o
-     *                          servidor recusa fora do plano
+     *                          servidor recusa no só leitura
+     * @param emTeste           verdadeiro enquanto nenhum período foi pago; o aparelho antigo não
+     *                          lê e mostra o teste como o plano em dia
      */
     record RespostaDeIdentidade(UUID usuarioId, String nome, String perfil, UUID contaId,
             String nomeNegocio, String tipoNegocio, boolean estoqueHabilitado,
             boolean nsuObrigatorio, String plano, String situacaoDoPlano,
             LocalDate vencimentoDoPlano, LocalDate inicioDaSuspensao, List<String> recursos,
             boolean senhaProvisoria, boolean termosPendentes, String chavePix, String cidadePix,
-            boolean pixIntegrado) {
+            boolean pixIntegrado, boolean emTeste) {
     }
 }

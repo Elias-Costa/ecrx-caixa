@@ -10,7 +10,6 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import java.util.Map;
 import java.util.UUID;
 import org.hamcrest.Matchers;
@@ -115,7 +114,7 @@ class CorrecaoDoCadastroHttpTest extends TesteDeIntegracao {
     @DisplayName("o ADMIN corrige o nome do operador, que o vê ao entrar; o operador não corrige, e a outra Conta recebe 404")
     void correcaoDoNome() throws Exception {
         ContaCriada conta = criador.criar("Loja das Palmeiras", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         OperadorCriado operador = criarOperador(admin);
         // O operador escolhe a própria senha antes: com a provisória, o servidor só responde à troca.
@@ -154,7 +153,7 @@ class CorrecaoDoCadastroHttpTest extends TesteDeIntegracao {
     @DisplayName("o ADMIN corrige o nome do negócio, que a identidade e a configuração passam a mostrar; o operador não, e a outra Conta fica com o dela")
     void nomeDoNegocio() throws Exception {
         ContaCriada conta = criador.criar("Empório do Bairro", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         String doOperador = entrar(criarOperador(admin).email(), SENHA);
         String daOutraConta = entrar(criador.criar("Empório da Serra", SENHA).email(), SENHA);

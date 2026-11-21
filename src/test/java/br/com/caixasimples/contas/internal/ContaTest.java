@@ -5,83 +5,119 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import br.com.caixasimples.contas.Plano;
+import br.com.caixasimples.contas.RecursoDoPlano;
+import br.com.caixasimples.contas.SituacaoDoPlano;
 import java.time.Instant;
 import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * O ciclo do plano pago e a suspensão do acesso na raiz {@link Conta}: o que cada mudança recusa, e
- * que a recusa não deixa nada pela metade.
+ * O teste, o ciclo do plano, o só leitura e a suspensão do acesso na raiz {@link Conta}: o que cada
+ * mudança recusa, e que a recusa não deixa nada pela metade.
  *
  * <p>Teste de unidade puro, com datas fixas: a raiz não lê relógio, e quem chama informa o dia de
  * hoje. O caso de uso recusa antes boa parte destes casos, então a raiz é a segunda linha; a
- * terceira são as restrições do ciclo no banco, provadas em {@code PlanoServiceTest}.
+ * terceira são as restrições do ciclo no banco, provadas na migração do plano único.
  */
 class ContaTest {
 
-    /** A adesão de todos os testes: o ciclo vence todo dia 10. */
-    private static final LocalDate ADESAO = LocalDate.of(2026, 3, 10);
+    /** Meio-dia de 01/12/2026 no balcão: o teste vence em 15/12, uma terça. */
+    private static final Instant CRIACAO = Instant.parse("2026-12-01T15:00:00Z");
 
-    private static final LocalDate VENCIMENTO = LocalDate.of(2026, 4, 10);
+    private static final LocalDate FIM_DO_TESTE = LocalDate.of(2026, 12, 15);
+
+    /** O sábado depois do terceiro dia útil da tolerância: quarta, quinta e sexta. */
+    private static final LocalDate INICIO_DO_SOMENTE_LEITURA = LocalDate.of(2026, 12, 19);
 
     @Test
-    @DisplayName("a adesão parte do plano grátis para o plano pago, e só uma vez")
-    void adesaoSoDoGratisParaUmPlanoPago() {
-        Conta gratis = gratis();
-        assertThatIllegalArgumentException()
-                .isThrownBy(() -> gratis.ativarPlano(Plano.GRATIS, ADESAO))
-                .withMessageContaining("gratuito nao se ativa");
-        conferirCiclo(gratis, Plano.GRATIS, null, null);
+    @DisplayName("a Conta nasce no teste do plano Completo, que vence no décimo quinto dia, contado no fuso do balcão")
+    void nasceNoTeste() {
+        Conta conta = nova(CRIACAO);
+        conferirCiclo(conta, 15, FIM_DO_TESTE, true);
+        assertThat(conta.getPlano()).isEqualTo(Plano.COMPLETO);
+        assertThat(conta.inicioDoSomenteLeitura()).isEqualTo(INICIO_DO_SOMENTE_LEITURA);
 
-        // Uma segunda adesão recomeçaria o ciclo no dia dela, apagando o período já pago.
-        Conta completa = paga(Plano.COMPLETO);
-        assertThatIllegalStateException()
-                .isThrownBy(() -> completa.ativarPlano(Plano.COMPLETO, ADESAO.plusDays(5)))
-                .withMessageContaining("já está no plano");
-        conferirCiclo(completa, Plano.COMPLETO, 10, VENCIMENTO);
+        // 23h30 de 01/12 no balcão já é 02/12 em UTC; o teste conta do dia do balcão.
+        Conta tarde = nova(Instant.parse("2026-12-02T02:30:00Z"));
+        conferirCiclo(tarde, 15, FIM_DO_TESTE, true);
     }
 
     @Test
-    @DisplayName("a renovação é do plano da Conta e de um período ainda não pago")
-    void renovacaoDoProprioPlanoEDeUmPeriodoAindaNaoPago() {
-        Conta conta = paga(Plano.COMPLETO);
-        LocalDate maio = LocalDate.of(2026, 5, 10);
+    @DisplayName("no teste, o aviso começa três dias antes do fim, e o só leitura depois de três dias úteis")
+    void situacoesDoTeste() {
+        Conta conta = nova(CRIACAO);
 
-        assertThatIllegalStateException()
-                .isThrownBy(() -> conta.renovar(Plano.GRATIS, maio))
-                .withMessageContaining("A renovação é do plano");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> conta.renovar(Plano.COMPLETO, VENCIMENTO))
-                .withMessageContaining("já está pago");
-        assertThatIllegalStateException()
-                .isThrownBy(() -> conta.renovar(Plano.COMPLETO, VENCIMENTO.minusDays(1)))
-                .withMessageContaining("já está pago");
-        conferirCiclo(conta, Plano.COMPLETO, 10, VENCIMENTO);
-
-        // O limite: o período seguinte ao pago renova, e o dia do ciclo não muda.
-        conta.renovar(Plano.COMPLETO, maio);
-        conferirCiclo(conta, Plano.COMPLETO, 10, maio);
+        assertThat(conta.situacao(LocalDate.of(2026, 12, 11))).isEqualTo(SituacaoDoPlano.EM_DIA);
+        assertThat(conta.situacao(LocalDate.of(2026, 12, 12))).isEqualTo(SituacaoDoPlano.A_VENCER);
+        assertThat(conta.situacao(FIM_DO_TESTE)).isEqualTo(SituacaoDoPlano.VENCIDO);
+        assertThat(conta.situacao(LocalDate.of(2026, 12, 18))).isEqualTo(SituacaoDoPlano.VENCIDO);
+        assertThat(conta.somenteLeitura(LocalDate.of(2026, 12, 18))).isFalse();
+        assertThat(conta.somenteLeitura(INICIO_DO_SOMENTE_LEITURA)).isTrue();
     }
 
     @Test
-    @DisplayName("a Conta no plano grátis não tem ciclo: não renova nem tem período")
-    void contaGratisNaoTemCiclo() {
-        Conta gratis = gratis();
+    @DisplayName("os recursos valem todos, no teste e no período pago; no só leitura sai só o Pix integrado")
+    void recursosNoSomenteLeitura() {
+        Conta conta = nova(CRIACAO);
+
+        assertThat(conta.recursos(LocalDate.of(2026, 12, 18)))
+                .containsExactlyInAnyOrder(RecursoDoPlano.values());
+        assertThat(conta.recursos(INICIO_DO_SOMENTE_LEITURA)).containsExactlyInAnyOrder(
+                RecursoDoPlano.RELATORIOS, RecursoDoPlano.ESTOQUE, RecursoDoPlano.MULTIUSUARIO);
+    }
+
+    @Test
+    @DisplayName("a renovação no teste paga o mês que começa no fim dele, encerra o teste e mantém o dia")
+    void renovacaoNoTeste() {
+        Conta conta = nova(CRIACAO);
+        CicloDeVencimento.Periodo primeiro = conta.periodoDaRenovacao(LocalDate.of(2026, 12, 12));
+        assertThat(primeiro).isEqualTo(
+                new CicloDeVencimento.Periodo(FIM_DO_TESTE, LocalDate.of(2027, 1, 15)));
+
+        conta.renovar(primeiro.fim());
+        conferirCiclo(conta, 15, LocalDate.of(2027, 1, 15), false);
 
         assertThatIllegalStateException()
-                .isThrownBy(() -> gratis.renovar(Plano.COMPLETO, VENCIMENTO))
-                .withMessageContaining("gratuito não tem vencimento");
+                .isThrownBy(() -> conta.renovar(LocalDate.of(2027, 1, 15)))
+                .withMessageContaining("já está pago");
         assertThatIllegalStateException()
-                .isThrownBy(() -> gratis.periodoDaRenovacao(ADESAO))
-                .withMessageContaining("gratuito não tem vencimento");
-        conferirCiclo(gratis, Plano.GRATIS, null, null);
+                .isThrownBy(() -> conta.renovar(LocalDate.of(2027, 1, 14)))
+                .withMessageContaining("já está pago");
+        conferirCiclo(conta, 15, LocalDate.of(2027, 1, 15), false);
+    }
+
+    @Test
+    @DisplayName("pago na tolerância, o mês conta do vencimento; no só leitura não há renovação")
+    void renovacaoNaToleranciaEReconsultaNoSomenteLeitura() {
+        Conta conta = nova(CRIACAO);
+
+        assertThat(conta.periodoDaRenovacao(LocalDate.of(2026, 12, 18)))
+                .isEqualTo(new CicloDeVencimento.Periodo(FIM_DO_TESTE, LocalDate.of(2027, 1, 15)));
+        assertThatIllegalStateException()
+                .isThrownBy(() -> conta.periodoDaRenovacao(INICIO_DO_SOMENTE_LEITURA));
+    }
+
+    @Test
+    @DisplayName("pago no só leitura, o ciclo recomeça no dia do código, e só no só leitura")
+    void retomadaRecomecaOCiclo() {
+        Conta conta = nova(CRIACAO);
+        assertThatIllegalStateException()
+                .isThrownBy(() -> conta.retomar(LocalDate.of(2026, 12, 18)));
+        conferirCiclo(conta, 15, FIM_DO_TESTE, true);
+
+        LocalDate segunda = LocalDate.of(2026, 12, 21);
+        CicloDeVencimento.Periodo primeiro = conta.retomar(segunda);
+
+        assertThat(primeiro).isEqualTo(new CicloDeVencimento.Periodo(segunda, LocalDate.of(2027, 1, 21)));
+        conferirCiclo(conta, 21, LocalDate.of(2027, 1, 21), false);
+        assertThat(conta.situacao(segunda)).isEqualTo(SituacaoDoPlano.EM_DIA);
     }
 
     @Test
     @DisplayName("o nome do negócio é corrigido sem os espaços das pontas; em branco ou acima de 120 caracteres, recusado, também na criação")
     void nomeDoNegocio() {
-        Conta conta = paga(Plano.COMPLETO);
+        Conta conta = nova(CRIACAO);
         conta.corrigirNomeDoNegocio("  Cafeteria Aurora do Centro  ");
         assertThat(conta.getNomeNegocio()).isEqualTo("Cafeteria Aurora do Centro");
 
@@ -91,18 +127,18 @@ class ContaTest {
                 .withMessage("nome do negócio com 121 caracteres; o limite é 120.");
         assertThat(conta.getNomeNegocio()).isEqualTo("Cafeteria Aurora do Centro");
         // A correção não mexe no ciclo do plano.
-        conferirCiclo(conta, Plano.COMPLETO, 10, VENCIMENTO);
+        conferirCiclo(conta, 15, FIM_DO_TESTE, true);
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new Conta("a".repeat(121), null, Plano.GRATIS))
+                .isThrownBy(() -> new Conta("a".repeat(121), null, CRIACAO))
                 .withMessageContaining("o limite é 120");
     }
 
     @Test
     @DisplayName("a suspensão do acesso começa uma vez e só se desfaz na Conta suspensa, sem mexer no plano")
     void suspensaoDoAcesso() {
-        Conta conta = paga(Plano.COMPLETO);
-        Instant inicio = Instant.parse("2026-03-20T15:00:00Z");
+        Conta conta = nova(CRIACAO);
+        Instant inicio = Instant.parse("2026-12-05T15:00:00Z");
         assertThatIllegalStateException()
                 .isThrownBy(conta::reativar)
                 .withMessage("a Conta não está suspensa");
@@ -114,28 +150,22 @@ class ContaTest {
                 .isThrownBy(() -> conta.suspender(inicio.plusSeconds(60)))
                 .withMessageContaining("já está suspensa");
         assertThat(conta.getSuspensaEm()).isEqualTo(inicio);
-        conferirCiclo(conta, Plano.COMPLETO, 10, VENCIMENTO);
+        conferirCiclo(conta, 15, FIM_DO_TESTE, true);
 
         conta.reativar();
         assertThat(conta.isSuspensa()).isFalse();
         assertThat(conta.getSuspensaEm()).isNull();
     }
 
-    private static Conta gratis() {
-        return new Conta("Cafeteria Aurora", null, Plano.GRATIS);
+    private static Conta nova(Instant criadoEm) {
+        return new Conta("Cafeteria Aurora", null, criadoEm);
     }
 
-    private static Conta paga(Plano plano) {
-        Conta conta = gratis();
-        conta.ativarPlano(plano, ADESAO);
-        return conta;
-    }
-
-    /** O plano e as duas datas do ciclo, que o banco exige juntas no plano pago. */
-    private static void conferirCiclo(Conta conta, Plano plano, Integer diaDeVencimento,
-            LocalDate proximoVencimento) {
+    /** As duas datas do ciclo e a marca do teste. */
+    private static void conferirCiclo(Conta conta, int diaDeVencimento, LocalDate proximoVencimento,
+            boolean emTeste) {
         assertThat(conta)
-                .extracting(Conta::getPlano, Conta::getDiaDeVencimento, Conta::getProximoVencimento)
-                .containsExactly(plano, diaDeVencimento, proximoVencimento);
+                .extracting(Conta::getDiaDeVencimento, Conta::getProximoVencimento, Conta::isEmTeste)
+                .containsExactly(diaDeVencimento, proximoVencimento, emTeste);
     }
 }

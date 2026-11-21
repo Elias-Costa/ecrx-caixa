@@ -15,7 +15,6 @@ import br.com.caixasimples.cadastro.application.ProdutoService.DadosDoProduto;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.estoque.application.EstoqueService;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
@@ -47,7 +46,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
     @Test
     void adminDoCompletoCriaOperadorQueEntraEListaSemEmail() throws Exception {
         ContaCriada conta = criador.criar("Loja das Palmeiras", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "operador-" + UUID.randomUUID() + "@exemplo.test";
 
         String corpo = http.perform(post("/api/usuarios")
@@ -78,15 +77,15 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void planoSemMultiusuarioEUltimoAdminRespondemConflito() throws Exception {
+    void noTesteCriaUsuarioEUltimoAdminRespondeConflito() throws Exception {
+        // No teste, a Conta nova já cria mais de um usuário.
         ContaCriada conta = criador.criar("Armazém do Centro", SENHA);
         http.perform(post("/api/usuarios").with(autenticador.como(conta))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("nome", "Outro", "perfil", "OPERADOR",
                                 "email", "outro-" + UUID.randomUUID() + "@exemplo.test",
                                 "senha", SENHA))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("plano")));
+                .andExpect(status().isCreated());
         http.perform(post("/api/usuarios/{id}/inativar", conta.usuarioId())
                         .with(autenticador.como(conta)))
                 .andExpect(status().isConflict());
@@ -108,7 +107,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
     @Test
     void configuracaoEPorContaEHistoricoImpedeDesligar() throws Exception {
         ContaCriada primeira = criador.criar("Mercado da Praça", SENHA);
-        criador.contratar(primeira.contaId(), Plano.COMPLETO);
+        criador.contratar(primeira.contaId());
         ContaCriada segunda = criador.criar("Mercado da Rua", SENHA);
         http.perform(put("/api/conta/configuracao").with(autenticador.como(primeira))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -148,13 +147,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
         http.perform(get("/api/conta/configuracao").with(autenticador.como(segunda)))
                 .andExpect(jsonPath("$.estoqueComMovimentos").value(false));
 
-        // Ligar o controle exige o plano que inclui o estoque; no plano grátis, a recusa é do plano.
-        http.perform(put("/api/conta/configuracao").with(autenticador.como(segunda))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"estoqueHabilitado\":true}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("plano Completo")));
-        criador.contratar(segunda.contaId(), Plano.COMPLETO);
+        // No teste, a Conta já liga o controle: o plano é um só e inclui o estoque.
         http.perform(put("/api/conta/configuracao").with(autenticador.como(segunda))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estoqueHabilitado\":true}"))
@@ -175,7 +168,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
                 .andExpect(jsonPath("$.estoqueHabilitado").value(false))
                 .andExpect(jsonPath("$.nsuObrigatorio").value(false));
 
-        // O plano grátis liga: a exigência é da venda, que todo plano tem.
+        // No teste, liga: a exigência é da venda.
         http.perform(put("/api/conta/configuracao/nsu").with(autenticador.como(primeira))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nsuObrigatorio\":true}"))
@@ -201,7 +194,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
                 .andExpect(jsonPath("$.nsuObrigatorio").value(true));
 
         // A rota do estoque responde a configuração inteira, com a exigência intacta.
-        criador.contratar(primeira.contaId(), Plano.COMPLETO);
+        criador.contratar(primeira.contaId());
         http.perform(put("/api/conta/configuracao").with(autenticador.como(primeira))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estoqueHabilitado\":true}"))
@@ -259,7 +252,7 @@ class AdministracaoHttpTest extends TesteDeIntegracao {
     @ExtendWith(OutputCaptureExtension.class)
     void nomeEEmailAcimaDaColunaRecebem400(CapturedOutput log) throws Exception {
         ContaCriada conta = criador.criar("Loja dos Limites", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
 
         criarOperador(conta, "n".repeat(121), "atendente-" + UUID.randomUUID() + "@exemplo.test")
                 .andExpect(status().isBadRequest())

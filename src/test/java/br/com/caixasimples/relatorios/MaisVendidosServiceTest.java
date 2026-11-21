@@ -15,7 +15,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.relatorios.application.MaisVendidosService;
 import br.com.caixasimples.relatorios.application.MaisVendidosService.MaisVendidos;
 import br.com.caixasimples.relatorios.application.MaisVendidosService.Posicao;
@@ -84,7 +83,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("ordena por quantidade decrescente, com valor, nome e unidade, e o limite corta")
     void rankingPorQuantidadeComValorAoLado() {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID cafe = cenario.produto("Cafe coado", "4.50", "un");
         UUID bolo = cenario.produto("Bolo de laranja", "12.00", "fatia");
@@ -128,7 +127,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("pelo valor, o que mais rendeu vem primeiro, o empate vai pelo nome e o limite corta")
     void rankingPorValor() {
         ContaCriada conta = criador.criar("Padaria Aurora", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID cafe = cenario.produto("Cafe coado", "4.50", "un");
         UUID bolo = cenario.produto("Bolo de laranja", "12.00", "fatia");
@@ -171,7 +170,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("conta só as vendas CONCLUIDA, pelo dia da conclusão no fuso do balcão")
     void contaSoAsConcluidasNoDia() {
         ContaCriada conta = criador.criar("Padaria Central", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID pao = cenario.produto("Pao frances", "0.80", "un");
 
@@ -200,7 +199,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("o valor é arredondado por item, como o comprovante, e o desconto do item é subtraído")
     void valorArredondadoPorItemComDesconto() {
         ContaCriada conta = criador.criar("Mercearia da Rua", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID queijo = cenario.produto("Queijo da serra", "39.90", "kg");
 
@@ -227,7 +226,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("produto inativado continua no ranking do período em que foi vendido, com o nome atual")
     void produtoInativadoContinuaNoRanking() {
         ContaCriada conta = criador.criar("Loja da Esquina", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario cenario = prepararCenario(conta);
         UUID caneca = cenario.produto("Caneca", "25.00", "un");
         concluida(conta, cenario, noBalcao(DIA, LocalTime.of(9, 0)),
@@ -252,7 +251,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("o operador não lê o ranking, nem o próprio: é relatório do administrador (RF30)")
     void operadorNaoLeORanking() {
         ContaCriada conta = criador.criar("Barbearia com Atendente", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");
 
         assertThatExceptionOfType(AcessoNegadoException.class)
@@ -268,7 +267,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("período sem venda devolve lista vazia; período invertido e limite zero são recusados")
     void periodoVazioEArgumentosInvalidos() {
         ContaCriada conta = criador.criar("Barbearia do Centro", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
 
         MaisVendidos vazio = conta.comoUsuario(
                 () -> maisVendidos.doPeriodo(DIA, DIA, DEZ, QUANTIDADE));
@@ -289,11 +288,11 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("duas contas com vendas no mesmo dia recebem cada uma só o seu ranking (RNF05)")
     void contasComDadosEquivalentesRecebemResultadosDistintos() {
         ContaCriada contaA = criador.criar("Loja A", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja B", SENHA_DE_TESTE);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         ContaCriada contaC = criador.criar("Loja C", SENHA_DE_TESTE);
-        criador.contratar(contaC.contaId(), Plano.COMPLETO);
+        criador.contratar(contaC.contaId());
         Cenario cenarioA = prepararCenario(contaA);
         Cenario cenarioB = prepararCenario(contaB);
         UUID cafeDeA = cenarioA.produto("Cafe coado", "4.50", "un");
@@ -322,7 +321,7 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("por operador, o ranking é o do que ele vendeu, e o da conta soma os dois (RF24)")
     void rankingDeUmOperador() {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Cenario doTitular = prepararCenario(conta);
         Cenario daColega = prepararCenarioDeOutroOperador(conta, "Beatriz");
         UUID cafe = doTitular.produto("Cafe coado", "4.50", "un");
@@ -369,9 +368,9 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("o filtro por operador não atravessa contas (RNF05)")
     void filtroPorOperadorNaoAtravessaContas() {
         ContaCriada contaA = criador.criar("Loja A", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja B", SENHA_DE_TESTE);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         Cenario cenarioA = prepararCenario(contaA);
         Cenario cenarioB = prepararCenario(contaB);
         UUID cafeDeA = cenarioA.produto("Cafe coado", "4.50", "un");
@@ -401,11 +400,11 @@ class MaisVendidosServiceTest extends TesteDeIntegracao {
     @DisplayName("pelo valor, cada conta recebe só o seu ranking, com e sem operador (RNF05)")
     void rankingPorValorNaoAtravessaContas() {
         ContaCriada contaA = criador.criar("Loja A", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja B", SENHA_DE_TESTE);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         ContaCriada contaC = criador.criar("Loja C", SENHA_DE_TESTE);
-        criador.contratar(contaC.contaId(), Plano.COMPLETO);
+        criador.contratar(contaC.contaId());
         Cenario cenarioA = prepararCenario(contaA);
         Cenario cenarioB = prepararCenario(contaB);
         UUID queijoDeA = cenarioA.produto("Queijo da serra", "39.90", "kg");

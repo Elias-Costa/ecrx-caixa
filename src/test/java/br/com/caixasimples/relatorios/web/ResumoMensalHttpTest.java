@@ -14,7 +14,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.shared.FormatoDeTela;
@@ -60,9 +59,9 @@ class ResumoMensalHttpTest extends TesteDeIntegracao {
     @Test
     void administradorBaixaOArquivoDoMesSemLerOutraConta() throws Exception {
         ContaCriada contaA = criador.criar("Salão do Resumo A", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Salão do Resumo B", SENHA);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         // Em A, mercadoria de 30 e serviço de 10 com 8 de desconto na venda, tudo em dinheiro.
         vendaMista(contaA, "30.00", "10.00", "8.00", FormaPagamento.DINHEIRO);
         // Em B, um valor com milhar, para provar que o número sai sem o ponto.
@@ -109,18 +108,18 @@ class ResumoMensalHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void operadorRecebe403EPlanoGratuito409() throws Exception {
+    void operadorRecebe403EContaEmTesteLeOResumo() throws Exception {
         ContaCriada operador = criador.criar("Loja do Operador", SENHA, Perfil.OPERADOR, true);
         resumo(operador, MES.toString()).andExpect(status().isForbidden());
 
-        ContaCriada gratis = criador.criar("Banca do Resumo", SENHA);
-        resumo(gratis, MES.toString()).andExpect(status().isConflict());
+        ContaCriada noTeste = criador.criar("Banca do Resumo", SENHA);
+        resumo(noTeste, MES.toString()).andExpect(status().isOk());
     }
 
     @Test
     void mesQueNaoTerminouOuMalEscritoRecebe400() throws Exception {
         ContaCriada admin = criador.criar("Loja do Mês", SENHA);
-        criador.contratar(admin.contaId(), Plano.COMPLETO);
+        criador.contratar(admin.contaId());
         YearMonth atual = YearMonth.now(FusoDeReferencia.DO_BALCAO);
 
         resumo(admin, atual.toString())

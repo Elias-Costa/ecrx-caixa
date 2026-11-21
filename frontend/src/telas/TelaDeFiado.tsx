@@ -5,11 +5,12 @@ import { SemConexao } from '../api/cliente'
 import { intencaoOnline } from '../api/intencaoOnline'
 import { fiado, type Divida } from '../api/fiado'
 import type { ComprovanteDeRecebimento, FormaPagamento } from '../api/vendas'
-import { diasAteHoje } from '../dataDoBalcao'
+import { diasAteHoje, hojeNoBalcao } from '../dataDoBalcao'
 import { dataHora, lerDinheiro, moeda } from '../formatos'
 import { normalizarNsu } from '../offline/raizDaVenda'
 import { criarVendaLocal } from '../offline/vendaLocal'
 import { useSessao } from '../sessao/useSessao'
+import { somenteLeitura } from '../shell/avisoDoPlano'
 import { CampoDeDinheiro } from './CampoDeDinheiro'
 import { erroDeCadastro } from './erroDeCadastro'
 import { filtrarPorNome } from './filtroPorNome'
@@ -171,9 +172,12 @@ export function TelaDeFiado() {
   // O total é da Conta inteira, e não muda com a busca.
   const totalCentavos = devedores.reduce((soma, devedor) => soma + devedor.totalCentavos, 0)
 
+  // Com a Conta só leitura, o recebimento seria recusado: ele põe dinheiro no caixa.
+  const contaSoLeitura = somenteLeitura(identidade, hojeNoBalcao())
+
   // O recebimento continua sendo de uma venda por vez, como a dívida é de cada venda.
   function receberDe(divida: Divida) {
-    return sessao && <button type="button" className="botao botao--secundario"
+    return sessao && !contaSoLeitura && <button type="button" className="botao botao--secundario"
       onClick={() => { setSelecionada(divida); setComprovante(undefined); setValor(''); setNsu(''); setErro(undefined) }}>
       Receber</button>
   }
@@ -188,8 +192,9 @@ export function TelaDeFiado() {
     {!carregando && devedores.length > 0 && <p className="fiado__total">Total em aberto:{' '}
       <strong>{moeda.format(totalCentavos / 100)}</strong>, de {devedores.length === 1 ? '1 cliente' : `${devedores.length} clientes`}.</p>}
     {carregando ? <p>Carregando...</p> : lida && <>
+      {contaSoLeitura && <p>Com a Conta só leitura, receber fiado volta depois do pagamento do plano.</p>}
       {/* Sem caixa não há recebimento: ir ao caixa é a ação da tela, e vem como botão. */}
-      {!sessao && <>
+      {!sessao && !contaSoLeitura && <>
         <p>Abra o seu caixa para registrar recebimentos.</p>
         <p><Link className="botao" to="/caixa">Ir ao caixa</Link></p>
       </>}
@@ -225,7 +230,7 @@ export function TelaDeFiado() {
         })}</ul>
       </>}
     </>}
-    {selecionada && sessao && <form ref={formularioRef} className="cadastro__formulario" onSubmit={(evento) => void receber(evento)}>
+    {selecionada && sessao && !contaSoLeitura && <form ref={formularioRef} className="cadastro__formulario" onSubmit={(evento) => void receber(evento)}>
       <h3>Receber de {selecionada.nomeCliente}</h3>
       <p>Saldo desta venda: {moeda.format(selecionada.saldoDevedor)}</p>
       <CampoDeDinheiro rotulo="Valor recebido" required valor={valor} aoMudar={setValor} />

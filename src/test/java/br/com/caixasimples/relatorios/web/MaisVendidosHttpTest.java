@@ -13,7 +13,6 @@ import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
@@ -50,9 +49,9 @@ class MaisVendidosHttpTest extends TesteDeIntegracao {
     @Test
     void administradorConsultaORankingComLimiteSemLerOutraConta() throws Exception {
         ContaCriada contaA = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja da Esquina", SENHA);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         UUID caixaDeA = caixa(contaA);
         UUID caixaDeB = caixa(contaB);
         UUID cafe = produto(contaA, "Cafe coado", "un");
@@ -96,9 +95,9 @@ class MaisVendidosHttpTest extends TesteDeIntegracao {
     @Test
     void ordemPeloValorEhOpcionalESemElaORankingSegueAQuantidade() throws Exception {
         ContaCriada contaA = criador.criar("Padaria Aurora", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja da Esquina", SENHA);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         UUID caixaDeA = caixa(contaA);
         UUID caixaDeB = caixa(contaB);
         UUID cafe = produto(contaA, "Cafe coado", "un");
@@ -145,7 +144,7 @@ class MaisVendidosHttpTest extends TesteDeIntegracao {
     @Test
     void filtroDoOperadorSoContaAsVendasDeleENaoAtravessaContas() throws Exception {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ContaCriada outra = criador.criar("Loja de Fora", SENHA);
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Beatriz");
         UUID caixaDoTitular = caixa(conta);
@@ -173,14 +172,15 @@ class MaisVendidosHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void recusaOperadorPlanoSemRelatorioEParametroInvalido() throws Exception {
+    void recusaOperadorEValeNoTesteEParametroInvalido() throws Exception {
         ContaCriada operador = criador.criar("Loja do Operador", SENHA, Perfil.OPERADOR, true);
-        ContaCriada gratis = criador.criar("Loja Gratuita", SENHA);
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
         ContaCriada admin = criador.criar("Loja do Ranking", SENHA);
-        criador.contratar(admin.contaId(), Plano.COMPLETO);
+        criador.contratar(admin.contaId());
 
         maisVendidos(operador, 10, null).andExpect(status().isForbidden());
-        maisVendidos(gratis, 10, null).andExpect(status().isConflict());
+        // A Conta nova, no teste, já tem os relatórios.
+        maisVendidos(noTeste, 10, null).andExpect(status().isOk());
         maisVendidos(admin, 0, null).andExpect(status().isBadRequest());
         http.perform(get("/api/relatorios/mais-vendidos")
                         .param("inicio", DIA.toString())

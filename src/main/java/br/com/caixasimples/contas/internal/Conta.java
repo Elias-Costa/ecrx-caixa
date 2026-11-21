@@ -4,6 +4,7 @@ import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.contas.RecursoDoPlano;
 import br.com.caixasimples.contas.SituacaoDoPlano;
 import br.com.caixasimples.shared.ContaId;
+import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.LimiteDeTexto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -26,9 +27,10 @@ import java.util.UUID;
  * filtrar aqui. Em troca, {@link ContaRepository} nunca é consultado com um id vindo de fora da
  * aplicação, e sim sempre a partir do contexto de tenant.
  *
- * <p>O plano pago tem ciclo mensal: o dia do vencimento e o próximo vencimento, os dois nulos no
- * plano gratuito, e o banco recusa um sem o outro. O plano só muda por aqui, pela aplicação de um
- * pedido de plano, e as datas seguem {@link CicloDeVencimento}.
+ * <p>O plano é um só, e a Conta nasce num teste dele: o fim do teste é o primeiro vencimento, e o
+ * dia dele, o dia do vencimento de todos os meses. Depois do vencimento sem pagamento vem a
+ * tolerância e, depois dela, o só leitura. O ciclo só muda por aqui, pela aplicação de um pedido de
+ * plano, e as datas seguem {@link CicloDeVencimento}.
  */
 @Entity
 @Table(name = "conta")
@@ -53,13 +55,17 @@ public class Conta {
     @Column(nullable = false)
     private Plano plano;
 
-    /** O dia do mês da adesão, em que o plano pago vence. */
-    @Column(name = "dia_de_vencimento")
-    private Integer diaDeVencimento;
+    /** O dia do mês em que o plano vence: o do fim do teste, ou o do pagamento feito no só leitura. */
+    @Column(name = "dia_de_vencimento", nullable = false)
+    private int diaDeVencimento;
 
-    /** O fim, exclusive, do último período pago. */
-    @Column(name = "proximo_vencimento")
+    /** O fim, exclusive, do teste ou do último período pago. */
+    @Column(name = "proximo_vencimento", nullable = false)
     private LocalDate proximoVencimento;
+
+    /** Se nenhum período foi pago ainda: o vencimento é o fim do teste. */
+    @Column(name = "em_teste", nullable = false)
+    private boolean emTeste;
 
     @Column(name = "estoque_habilitado", nullable = false)
     private boolean estoqueHabilitado;
@@ -75,8 +81,8 @@ public class Conta {
 
     /**
      * O instante da suspensão imediata do acesso, por uso ilegal ou ataque ao serviço; nulo quando o
-     * acesso vale. Não tem relação com o plano: a mensalidade atrasada suspende só os recursos pagos,
-     * pelo vencimento, e a Conta continua entrando.
+     * acesso vale. Não tem relação com o plano: a mensalidade atrasada deixa a Conta só leitura,
+     * pelo vencimento, e todos continuam entrando.
      */
     @Column(name = "suspensa_em")
     private Instant suspensaEm;
@@ -98,18 +104,25 @@ public class Conta {
     }
 
     /**
+     * A Conta nova, no teste, que vence no fim dele, contado do dia da criação no balcão.
+     *
      * @param tipoNegocio opcional; casa com {@code ModeloProduto.tipo_negocio} para sugerir o
      *                    catálogo inicial (RF32), e nulo significa cadastro começando em branco
+     * @param criadoEm    o instante da criação, que dá o dia em que o teste começa
      */
-    public Conta(String nomeNegocio, String tipoNegocio, Plano plano) {
+    public Conta(String nomeNegocio, String tipoNegocio, Instant criadoEm) {
         this.id = UUID.randomUUID();
         this.nomeNegocio = nomeDoNegocioConferido(nomeNegocio);
         this.tipoNegocio = tipoNegocio;
-        this.plano = Objects.requireNonNull(plano, "plano nao pode ser nulo");
+        this.plano = Plano.COMPLETO;
         this.estoqueHabilitado = false;
         this.nsuObrigatorio = false;
         this.catalogoInicialAplicado = false;
-        this.criadoEm = Instant.now();
+        this.criadoEm = Objects.requireNonNull(criadoEm, "criadoEm nao pode ser nulo");
+        LocalDate diaDaCriacao = LocalDate.ofInstant(criadoEm, FusoDeReferencia.DO_BALCAO);
+        this.proximoVencimento = CicloDeVencimento.fimDoTeste(diaDaCriacao);
+        this.diaDeVencimento = proximoVencimento.getDayOfMonth();
+        this.emTeste = true;
     }
 
     private static String nomeDoNegocioConferido(String nome) {
@@ -219,103 +232,96 @@ public class Conta {
         this.suspensaEm = null;
     }
 
-    /** Nulo no plano gratuito. */
-    public Integer getDiaDeVencimento() {
+    public int getDiaDeVencimento() {
         return diaDeVencimento;
     }
 
-    /** Nulo no plano gratuito. */
+    /** O fim, exclusive, do teste ou do último período pago. */
     public LocalDate getProximoVencimento() {
         return proximoVencimento;
     }
 
-    /** Onde a Conta está no ciclo do plano pago, no dia de hoje do balcão. */
+    /** Se nenhum período foi pago ainda. */
+    public boolean isEmTeste() {
+        return emTeste;
+    }
+
+    /** Onde a Conta está no teste ou no ciclo, no dia de hoje do balcão. */
     public SituacaoDoPlano situacao(LocalDate hoje) {
-        if (plano == Plano.GRATIS) {
-            return SituacaoDoPlano.SEM_MENSALIDADE;
-        }
-        return CicloDeVencimento.situacao(proximoVencimento, hoje);
+        return CicloDeVencimento.situacao(proximoVencimento, emTeste, hoje);
     }
 
     /**
-     * Se o recurso vale hoje: o plano o inclui e não está suspenso. Na tolerância depois do
-     * vencimento, ainda vale.
+     * Se a Conta está só leitura hoje: passou a tolerância depois do vencimento, e o pagamento não
+     * chegou. Não começa venda nem abre caixa, mas fecha o aberto e consulta tudo.
      */
-    public boolean temRecurso(RecursoDoPlano recurso, LocalDate hoje) {
-        return plano.inclui(recurso) && situacao(hoje) != SituacaoDoPlano.SUSPENSO;
+    public boolean somenteLeitura(LocalDate hoje) {
+        return situacao(hoje) == SituacaoDoPlano.SOMENTE_LEITURA;
     }
 
-    /** Os recursos que valem hoje, para o aplicativo decidir o que mostrar. */
+    /**
+     * Os recursos que valem hoje, para o aplicativo decidir o que mostrar. No só leitura sai o Pix
+     * integrado, porque a cobrança nova é recusada.
+     */
     public Set<RecursoDoPlano> recursos(LocalDate hoje) {
-        Set<RecursoDoPlano> ativos = EnumSet.noneOf(RecursoDoPlano.class);
-        for (RecursoDoPlano recurso : RecursoDoPlano.values()) {
-            if (temRecurso(recurso, hoje)) {
-                ativos.add(recurso);
-            }
+        Set<RecursoDoPlano> ativos = EnumSet.allOf(RecursoDoPlano.class);
+        if (somenteLeitura(hoje)) {
+            ativos.remove(RecursoDoPlano.PIX_INTEGRADO);
         }
         return ativos;
     }
 
-    /** O primeiro dia sem os recursos pagos se não houver renovação. Nulo no plano gratuito. */
-    public LocalDate inicioDaSuspensao() {
-        if (plano == Plano.GRATIS) {
-            return null;
-        }
-        return CicloDeVencimento.inicioDaSuspensao(proximoVencimento);
-    }
-
-    /** O período que uma renovação pedida hoje paga. */
-    public CicloDeVencimento.Periodo periodoDaRenovacao(LocalDate hoje) {
-        exigirPlanoPago();
-        return CicloDeVencimento.periodoDaRenovacao(proximoVencimento, diaDeVencimento, hoje);
+    /** O primeiro dia em só leitura, se o pagamento não chegar até lá. */
+    public LocalDate inicioDoSomenteLeitura() {
+        return CicloDeVencimento.inicioDoSomenteLeitura(proximoVencimento);
     }
 
     /**
-     * Começa o plano pago, com o primeiro período a partir de hoje: o dia de hoje vira o dia do
-     * vencimento de todos os meses.
+     * O período que uma renovação pedida hoje paga: o que começa no vencimento ainda não pago, no
+     * teste também.
      *
-     * @return o primeiro período pago
-     * @throws IllegalStateException se a Conta já tem plano pago
+     * @throws IllegalStateException se a Conta está só leitura, em que o pagamento recomeça o ciclo
+     *         em vez de renovar
      */
-    public CicloDeVencimento.Periodo ativarPlano(Plano novo, LocalDate hoje) {
-        Objects.requireNonNull(novo, "plano nao pode ser nulo");
-        if (novo == Plano.GRATIS) {
-            throw new IllegalArgumentException("o plano gratuito nao se ativa");
+    public CicloDeVencimento.Periodo periodoDaRenovacao(LocalDate hoje) {
+        if (somenteLeitura(hoje)) {
+            throw new IllegalStateException("conta em so leitura nao renova; o ciclo recomeca");
         }
-        if (plano != Plano.GRATIS) {
-            throw new IllegalStateException("A Conta já está no plano " + plano.nomeExibido()
-                    + "; a adesão vale só para quem está no plano gratuito.");
+        return CicloDeVencimento.periodoDaRenovacao(proximoVencimento, diaDeVencimento);
+    }
+
+    /**
+     * Tira a Conta do só leitura com o pagamento: o ciclo recomeça hoje, e o dia de hoje vira o dia
+     * do vencimento de todos os meses. Ninguém paga pelos dias em que não pôde vender.
+     *
+     * @return o primeiro período do ciclo novo
+     * @throws IllegalStateException se a Conta não está só leitura, quando o pagamento é renovação
+     */
+    public CicloDeVencimento.Periodo retomar(LocalDate hoje) {
+        Objects.requireNonNull(hoje, "hoje nao pode ser nulo");
+        if (!somenteLeitura(hoje)) {
+            throw new IllegalStateException("conta fora do so leitura renova; nao recomeca o ciclo");
         }
-        this.plano = novo;
         this.diaDeVencimento = hoje.getDayOfMonth();
         this.proximoVencimento = CicloDeVencimento.seguinte(hoje, diaDeVencimento);
+        this.emTeste = false;
         return new CicloDeVencimento.Periodo(hoje, proximoVencimento);
     }
 
     /**
-     * Registra o período pago pela renovação. O dia do vencimento não muda, nem com atraso: o
-     * período pago é o que venceu, e não um mês a partir do pagamento.
+     * Registra o período pago pela renovação e encerra o teste. O dia do vencimento não muda, nem com
+     * o pagamento feito na tolerância: o período pago é o que venceu, e não um mês a partir dele.
      *
      * @param fim o fim, exclusive, do período pago, que passa a ser o próximo vencimento
-     * @throws IllegalStateException se a Conta mudou de plano desde o pedido, ou se o período já
-     *         estava pago
+     * @throws IllegalStateException se o período já estava pago
      */
-    public void renovar(Plano renovado, LocalDate fim) {
-        exigirPlanoPago();
-        if (renovado != plano) {
-            throw new IllegalStateException("A renovação é do plano " + renovado.nomeExibido()
-                    + ", e a Conta está no plano " + plano.nomeExibido() + ".");
-        }
+    public void renovar(LocalDate fim) {
+        Objects.requireNonNull(fim, "fim nao pode ser nulo");
         if (!fim.isAfter(proximoVencimento)) {
             throw new IllegalStateException("O período desta renovação já está pago.");
         }
         this.proximoVencimento = fim;
-    }
-
-    private void exigirPlanoPago() {
-        if (plano == Plano.GRATIS) {
-            throw new IllegalStateException("O plano gratuito não tem vencimento.");
-        }
+        this.emTeste = false;
     }
 
     /** Liga ou desliga o controle de estoque desta conta (RF17). */

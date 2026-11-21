@@ -13,7 +13,6 @@ import br.com.caixasimples.cadastro.application.ProdutoService.DadosDoProduto;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
 import java.math.BigDecimal;
@@ -96,20 +95,24 @@ class EntradaDeEstoqueHttpTest extends TesteDeIntegracao {
         entrada(conta, inativo, "{\"quantidade\":3}").andExpect(status().isConflict());
 
         ContaCriada desligada = criador.criar("Mercado Desligado", SENHA);
-        criador.contratar(desligada.contaId(), Plano.COMPLETO);
+        criador.contratar(desligada.contaId());
         UUID doDesligado = cadastrar(desligada, TipoProduto.PRODUTO, "Arroz");
         entrada(desligada, doDesligado, "{\"quantidade\":3}").andExpect(status().isConflict());
 
-        ContaCriada gratis = criador.criar("Banca Gratuita", SENHA);
-        criador.habilitarEstoque(gratis.contaId());
-        UUID doGratis = cadastrar(gratis, TipoProduto.PRODUTO, "Arroz");
-        entrada(gratis, doGratis, "{\"quantidade\":3}").andExpect(status().isConflict());
+        // No teste, a entrada vale como no período pago, e também no só leitura: o estoque não põe
+        // nem tira dinheiro do balcão.
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
+        criador.habilitarEstoque(noTeste.contaId());
+        UUID doTeste = cadastrar(noTeste, TipoProduto.PRODUTO, "Arroz");
+        entrada(noTeste, doTeste, "{\"quantidade\":3}").andExpect(status().is2xxSuccessful());
+        criador.deixarSomenteLeitura(noTeste.contaId());
+        entrada(noTeste, doTeste, "{\"quantidade\":2}").andExpect(status().is2xxSuccessful());
     }
 
     @Test
     void operadorRecebe403EOutraContaRecebe404() throws Exception {
         ContaCriada operador = criador.criar("Loja do Operador", SENHA, Perfil.OPERADOR, true);
-        criador.contratar(operador.contaId(), Plano.COMPLETO);
+        criador.contratar(operador.contaId());
         criador.habilitarEstoque(operador.contaId());
         entrada(operador, UUID.randomUUID(), "{\"quantidade\":1}").andExpect(status().isForbidden());
 
@@ -187,7 +190,7 @@ class EntradaDeEstoqueHttpTest extends TesteDeIntegracao {
 
     private ContaCriada contaComEstoque(String nome) {
         ContaCriada conta = criador.criar(nome, SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         criador.habilitarEstoque(conta.contaId());
         return conta;
     }

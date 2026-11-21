@@ -1,6 +1,5 @@
 package br.com.caixasimples.contas.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
 import br.com.caixasimples.contas.internal.Conta;
 import br.com.caixasimples.contas.internal.ContaRepository;
 import br.com.caixasimples.contas.internal.Credencial;
@@ -8,10 +7,8 @@ import br.com.caixasimples.contas.internal.CredencialRepository;
 import br.com.caixasimples.contas.internal.Usuario;
 import br.com.caixasimples.contas.internal.UsuarioRepository;
 import br.com.caixasimples.shared.ContaId;
-import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Perfil;
 import br.com.caixasimples.shared.TenantContext;
-import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -32,10 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
  * regra que a tela aplica. O ADMIN inativo, inclusive o bloqueado à espera da conclusão da
  * inativação, também não recebe.
  *
- * <p><strong>A Conta sem o recurso de relatórios hoje não recebe nada</strong>: o plano gratuito, o
- * pago com os recursos suspensos por falta de renovação e a Conta suspensa pelo mantenedor. O resumo
- * é conteúdo de relatório, e o e-mail não entrega o que a tela recusa. O dia é o de hoje no balcão,
- * como na recusa dos relatórios.
+ * <p><strong>A Conta suspensa pelo mantenedor não recebe nada</strong>, porque ninguém dela entra
+ * para ver o que o e-mail traria. A Conta só leitura recebe: o caixa fechado é histórico, e os
+ * relatórios continuam abertos a ela na tela.
  */
 @Service
 public class DestinatariosDoResumo {
@@ -66,8 +62,7 @@ public class DestinatariosDoResumo {
             return Optional.empty();
         }
         Conta conta = encontrada.get();
-        LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
-        if (conta.isSuspensa() || !conta.temRecurso(RecursoDoPlano.RELATORIOS, hoje)) {
+        if (conta.isSuspensa()) {
             return Optional.empty();
         }
 

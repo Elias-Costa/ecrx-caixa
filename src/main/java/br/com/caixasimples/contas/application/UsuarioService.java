@@ -1,6 +1,5 @@
 package br.com.caixasimples.contas.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
 import br.com.caixasimples.contas.internal.Conta;
 import br.com.caixasimples.contas.internal.ContaRepository;
 import br.com.caixasimples.contas.internal.Credencial;
@@ -49,18 +48,16 @@ public class UsuarioService {
     private final PasswordEncoder encoder;
     private final PoliticaDeSenha politica;
     private final RegistroDeRemocoes registroDeRemocoes;
-    private final ContaService contaService;
 
     UsuarioService(ContaRepository contas, UsuarioRepository usuarios,
             CredencialRepository credenciais, PasswordEncoder encoder, PoliticaDeSenha politica,
-            RegistroDeRemocoes registroDeRemocoes, ContaService contaService) {
+            RegistroDeRemocoes registroDeRemocoes) {
         this.contas = contas;
         this.usuarios = usuarios;
         this.credenciais = credenciais;
         this.encoder = encoder;
         this.politica = politica;
         this.registroDeRemocoes = registroDeRemocoes;
-        this.contaService = contaService;
     }
 
     /**
@@ -73,9 +70,6 @@ public class UsuarioService {
      *
      * @return o id do usuário criado, gerado na aplicação
      * @throws br.com.caixasimples.shared.AcessoNegadoException se quem chama não é ADMIN
-     * @throws RecursoForaDoPlanoException se o plano da conta só admite um usuário
-     * @throws PlanoSuspensoException se os recursos pagos estão suspensos; os usuários que já
-     *         existem continuam entrando
      * @throws br.com.caixasimples.contas.internal.SenhaRecusadaException se a senha é curta,
      *         vazada ou não pôde ser verificada
      * @throws EmailJaCadastradoException se o e-mail já tem login, nesta ou em outra conta
@@ -88,7 +82,6 @@ public class UsuarioService {
         String emailNormalizado = exigirTexto(email, "e-mail");
 
         Conta conta = contaDoContexto();
-        contaService.exigirRecurso(RecursoDoPlano.MULTIUSUARIO);
 
         // Falha antes de gravar qualquer coisa se a senha não servir.
         politica.exigirValida(senha);
@@ -216,8 +209,7 @@ public class UsuarioService {
      * fica provisória, e o aplicativo pede a troca na próxima entrada. Pela mesma razão passa pela
      * política com a recusa quando a lista de vazamentos não responde, como a senha inicial.
      *
-     * <p>Não alcança outro administrador, que tomaria o acesso dele, e não pede o recurso de
-     * multiusuário do plano: o operador já existe, como na inativação.
+     * <p>Não alcança outro administrador, que tomaria o acesso dele.
      *
      * <p>A linha do operador fica travada até o commit, para uma troca de senha dele ao mesmo tempo
      * não gravar a mesma versão de acesso. A trava não barra a leitura do filtro do token.
@@ -259,7 +251,7 @@ public class UsuarioService {
      * vendas e de caixas dele passa a mostrar o nome corrigido, que é o mesmo Usuário.
      *
      * <p>É do administrador porque quem operou cada caixa é registro do negócio, como na remoção do
-     * nome. Não pede o recurso de multiusuário do plano: o Usuário já existe, como na inativação.
+     * nome.
      *
      * <p><strong>A linha do Usuário é lida com a trava</strong>, que vale até o commit. A gravação
      * escreve a linha inteira, inclusive a versão de acesso; sem a trava, uma troca de senha dele ao

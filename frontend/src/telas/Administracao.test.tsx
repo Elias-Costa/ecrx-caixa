@@ -328,12 +328,12 @@ describe('administração na tela', () => {
     expect(screen.queryByRole('button', { name: 'Tirar a chave' })).not.toBeInTheDocument()
   })
 
-  it('mostra a recusa por plano sem esconder a lista de usuários', async () => {
+  it('mostra a recusa do servidor sem esconder a lista de usuários', async () => {
     vi.spyOn(contas, 'usuarios').mockResolvedValue([{
       id: 'admin', nome: 'Ana', perfil: 'ADMIN', ativo: true,
     }])
     vi.spyOn(contas, 'criarUsuario').mockRejectedValue(
-      new ErroDaApi(409, 'Conflict', 'o plano admite um único usuário', {}),
+      new ErroDaApi(409, 'Conflict', 'Já existe um usuário com o e-mail bia@exemplo.test.', {}),
     )
     render(comSessao(<TelaDeUsuarios />))
     expect(await screen.findByText('Ana')).toBeInTheDocument()
@@ -343,29 +343,11 @@ describe('administração na tela', () => {
     fireEvent.change(screen.getByLabelText('Senha inicial'), { target: { value: 'uma senha longa de teste' } })
     fireEvent.click(screen.getByRole('button', { name: 'Criar usuário' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('o plano admite um único usuário')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Já existe um usuário com o e-mail bia@exemplo.test.')
     expect(screen.getByText('Ana')).toBeInTheDocument()
   })
 
-  it('sem o estoque no plano, ligar o controle fica indisponível e a tela aponta o plano', async () => {
-    vi.spyOn(contas, 'configuracao').mockResolvedValue({ nomeNegocio: 'Loja', estoqueHabilitado: false, estoqueComMovimentos: false, nsuObrigatorio: false })
-    const definir = vi.spyOn(contas, 'definirEstoque')
-    render(<MemoryRouter>
-      <SessaoContext.Provider value={{
-        identidade: { ...admin, plano: 'GRATIS', recursos: [] },
-        entrar: vi.fn(), sair: vi.fn(), atualizarIdentidade: vi.fn(), relerIdentidade: vi.fn(),
-      }}>
-        <TelaDeConfiguracao />
-      </SessaoContext.Provider>
-    </MemoryRouter>)
-
-    expect(await screen.findByRole('button', { name: 'Ligar controle de estoque' })).toBeDisabled()
-    expect(screen.getByText(/faz parte do plano Completo/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Plano' })).toHaveAttribute('href', '/plano')
-    expect(definir).not.toHaveBeenCalled()
-  })
-
-  it('exige o NSU no cartão mesmo no plano grátis e guarda a exigência na identidade', async () => {
+  it('exige o NSU no cartão e guarda a exigência na identidade', async () => {
     gravarToken('token-admin')
     vi.spyOn(contas, 'configuracao').mockResolvedValue({ nomeNegocio: 'Loja', estoqueHabilitado: false, estoqueComMovimentos: false, nsuObrigatorio: false })
     const definir = vi.spyOn(contas, 'definirNsu')
@@ -373,7 +355,7 @@ describe('administração na tela', () => {
     const atualizarIdentidade = vi.fn()
     render(<MemoryRouter>
       <SessaoContext.Provider value={{
-        identidade: { ...admin, plano: 'GRATIS', recursos: [] },
+        identidade: admin,
         entrar: vi.fn(), sair: vi.fn(), atualizarIdentidade, relerIdentidade: vi.fn(),
       }}>
         <TelaDeConfiguracao />

@@ -3,7 +3,6 @@ package br.com.caixasimples.estoque.application;
 import br.com.caixasimples.cadastro.application.ProdutoNaoEncontradoException;
 import br.com.caixasimples.cadastro.application.ProdutoService;
 import br.com.caixasimples.cadastro.application.ProdutoService.EstoqueDoProduto;
-import br.com.caixasimples.contas.RecursoDoPlano;
 import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.shared.TenantContext;
 import br.com.caixasimples.shared.UsuarioContext;
@@ -38,10 +37,9 @@ import org.springframework.stereotype.Service;
  * do balcão. A pergunta mora aqui, e não nos casos de uso do cadastro que executam, pelo mesmo
  * motivo da política do controle: este módulo decide quem participa.
  *
- * <p>Depois do perfil vem o plano: estoque é recurso do plano completo, suspenso quando a
- * mensalidade vence sem renovação. Só então importa se o controle está ligado. A baixa pela
- * Venda, nos ouvintes, não pergunta o plano: um saldo que parasse de acompanhar as vendas durante
- * a suspensão ficaria errado para sempre.
+ * <p>Depois do perfil, importa se o controle está ligado. O estoque continua no só leitura, porque
+ * não põe nem tira dinheiro do balcão; e a baixa pela Venda, nos ouvintes, nunca pergunta pelo plano:
+ * um saldo que parasse de acompanhar as vendas ficaria errado para sempre.
  *
  * <p>O alerta de estoque baixo é uma <strong>consulta</strong>, não um evento: a tela pergunta e
  * mostra a lista. Não há quem ouça um evento de estoque baixo hoje; quando o envio por canal
@@ -72,8 +70,6 @@ public class EstoqueService {
      * @param diferenca o que soma ou subtrai do saldo, com sinal; nunca zero
      * @param motivo    obrigatório (RF19)
      * @throws br.com.caixasimples.shared.AcessoNegadoException se quem chama não é ADMIN
-     * @throws IllegalStateException               se o plano não inclui o estoque ou está
-     *                                             suspenso
      * @throws ControleDeEstoqueDesligadoException se a conta não ligou o controle de estoque
      * @throws ProdutoNaoEncontradoException       se o id não existe nesta conta
      * @throws IllegalStateException               se o item é SERVICO ou está inativo
@@ -108,8 +104,6 @@ public class EstoqueService {
      * @param quantidade o que chegou; positiva, com até três casas
      * @param motivo     opcional, para a nota ou o fornecedor
      * @throws br.com.caixasimples.shared.AcessoNegadoException se quem chama não é ADMIN
-     * @throws IllegalStateException               se o plano não inclui o estoque ou está
-     *                                             suspenso
      * @throws ControleDeEstoqueDesligadoException se a conta não ligou o controle de estoque
      * @throws ProdutoNaoEncontradoException       se o id não existe nesta conta
      * @throws IllegalStateException               se o item é SERVICO ou está inativo
@@ -138,8 +132,6 @@ public class EstoqueService {
      * o padrão de todo produto, avisa quando o item acabou; um mínimo maior avisa antes.
      *
      * @throws br.com.caixasimples.shared.AcessoNegadoException se quem chama não é ADMIN
-     * @throws IllegalStateException               se o plano não inclui o estoque ou está
-     *                                             suspenso
      * @throws ControleDeEstoqueDesligadoException se a conta não ligou o controle de estoque
      * @throws ProdutoNaoEncontradoException       se o id não existe nesta conta
      * @throws IllegalStateException               se o item é SERVICO ou está inativo
@@ -156,8 +148,6 @@ public class EstoqueService {
      * alerta de estoque baixo: uma lista que a tela mostra, e vazia quando não há o que repor.
      *
      * @throws br.com.caixasimples.shared.AcessoNegadoException se quem chama não é ADMIN
-     * @throws IllegalStateException               se o plano não inclui o estoque ou está
-     *                                             suspenso
      * @throws ControleDeEstoqueDesligadoException se a conta não ligou o controle de estoque
      */
     public List<EstoqueDoProduto> produtosComEstoqueBaixo() {
@@ -166,7 +156,7 @@ public class EstoqueService {
         return produtos.listarComEstoqueBaixo();
     }
 
-    /** O filtro de perfil, de plano e do controle fica aqui antes de expor os saldos ao aplicativo. */
+    /** O filtro de perfil e do controle fica aqui antes de expor os saldos ao aplicativo. */
     public List<EstoqueDoProduto> produtos() {
         UsuarioContext.exigirAdmin();
         exigirControleLigado();
@@ -174,7 +164,6 @@ public class EstoqueService {
     }
 
     private void exigirControleLigado() {
-        contas.exigirRecurso(RecursoDoPlano.ESTOQUE);
         if (!contas.estoqueHabilitado()) {
             throw new ControleDeEstoqueDesligadoException(TenantContext.exigirAtual());
         }

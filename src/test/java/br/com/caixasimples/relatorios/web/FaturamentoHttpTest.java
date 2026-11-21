@@ -13,7 +13,6 @@ import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Money;
@@ -50,9 +49,9 @@ class FaturamentoHttpTest extends TesteDeIntegracao {
     @Test
     void administradorConsultaDiaEPeriodoSemLerOutraConta() throws Exception {
         ContaCriada contaA = criador.criar("Loja do Relatório A", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja do Relatório B", SENHA);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
         Cenario cenarioA = prepararCenario(contaA);
         Cenario cenarioB = prepararCenario(contaB);
         prepararVenda(contaA, cenarioA, DIA, "10.00");
@@ -96,7 +95,7 @@ class FaturamentoHttpTest extends TesteDeIntegracao {
     @Test
     void periodoInvertidoRecebe400() throws Exception {
         ContaCriada admin = criador.criar("Loja do Período", SENHA);
-        criador.contratar(admin.contaId(), Plano.COMPLETO);
+        criador.contratar(admin.contaId());
         http.perform(get("/api/relatorios/faturamento")
                         .param("inicio", DIA.toString())
                         .param("fim", DIA.minusDays(1).toString())
@@ -107,7 +106,7 @@ class FaturamentoHttpTest extends TesteDeIntegracao {
     @Test
     void rotaDoPeriodoFiltraPorFormaEOperadorSemAtravessarContas() throws Exception {
         ContaCriada conta = criador.criar("Loja dos Filtros", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ContaCriada outra = criador.criar("Loja de Fora", SENHA);
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");
         Cenario doTitular = prepararCenario(conta);

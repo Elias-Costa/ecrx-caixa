@@ -1,7 +1,5 @@
 package br.com.caixasimples.relatorios.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
-import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.relatorios.internal.LancamentoEmCartao;
 import br.com.caixasimples.relatorios.internal.VendaParaRelatorioRepository;
@@ -38,19 +36,15 @@ import org.springframework.transaction.annotation.Transactional;
  * também um estorno na maquininha.
  *
  * <p>Só lê, e a conta vem sempre do contexto (RNF05). <strong>É relatório do administrador
- * (RF30)</strong>, como os outros, e pede o plano com relatórios; a exigência do NSU, que é da
- * venda, não pede plano nenhum, e o NSU anotado antes da adesão ao plano pago aparece aqui depois
- * dela.
+ * (RF30)</strong>, como os outros.
  */
 @Service
 public class ConferenciaDoCartaoService {
 
     private final VendaParaRelatorioRepository vendas;
-    private final ContaService contas;
 
-    ConferenciaDoCartaoService(VendaParaRelatorioRepository vendas, ContaService contas) {
+    ConferenciaDoCartaoService(VendaParaRelatorioRepository vendas) {
         this.vendas = vendas;
-        this.contas = contas;
     }
 
     /**
@@ -84,7 +78,6 @@ public class ConferenciaDoCartaoService {
     /** A lista em si; {@code operadorId} nulo é a conta inteira, e só as duas públicas chamam. */
     private ConferenciaDoCartao consultar(LocalDate dia, UUID operadorId) {
         UsuarioContext.exigirAdmin();
-        contas.exigirRecurso(RecursoDoPlano.RELATORIOS);
         Periodo umDia = new Periodo(dia, dia);
 
         List<Lancamento> lancamentos = new ArrayList<>();

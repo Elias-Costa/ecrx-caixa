@@ -175,7 +175,7 @@ class EventosDeSegurancaHttpTest extends TesteDeIntegracao {
     void gestaoDeUsuarios(CapturedOutput saida) throws Exception {
         String origem = "192.0.2.16";
         ContaCriada conta = criador.criar("Sorveteria do Largo", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA, origem);
         String emailDoOperador = "operador-" + UUID.randomUUID() + "@exemplo.test";
 
@@ -221,7 +221,7 @@ class EventosDeSegurancaHttpTest extends TesteDeIntegracao {
     void bloqueioSemORegistro(CapturedOutput saida) throws Exception {
         String origem = "192.0.2.26";
         ContaCriada conta = criador.criar("Mercearia Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA, origem);
         String emailDoOperador = "operador-" + UUID.randomUUID() + "@exemplo.test";
         String corpo = http.perform(post("/api/usuarios").with(comToken(admin)).with(deOrigem(origem))
@@ -303,7 +303,7 @@ class EventosDeSegurancaHttpTest extends TesteDeIntegracao {
     void configuracao(CapturedOutput saida) throws Exception {
         String origem = "192.0.2.18";
         ContaCriada conta = criador.criar("Empório da Serra", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA, origem);
 
         http.perform(put("/api/conta/configuracao").with(comToken(admin)).with(deOrigem(origem))

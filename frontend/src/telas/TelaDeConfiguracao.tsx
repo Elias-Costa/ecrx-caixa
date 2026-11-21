@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import { contas, type ConfiguracaoDaConta, type TipoDeChavePix } from '../api/contas'
 import { sessaoAtual } from '../sessao/armazenamento'
-import { temRecurso } from '../sessao/Identidade'
 import { useSessao } from '../sessao/useSessao'
 import { CampoDeSenha } from './CampoDeSenha'
 import { erroDeCadastro } from './erroDeCadastro'
@@ -195,10 +193,6 @@ export function TelaDeConfiguracao() {
     void mudar('nome', () => contas.corrigirNomeDoNegocio(nome))
   }
 
-  // Ligar exige o estoque do plano; desligar, não: um controle ligado pode ser desligado enquanto
-  // não houver movimento, mesmo sem o plano.
-  const semPlanoParaLigar = configuracao?.estoqueHabilitado === false && !!identidade
-    && !temRecurso(identidade, 'ESTOQUE')
   // Depois do primeiro movimento o servidor recusa desligar; a tela não oferece o que seria recusado.
   const estoqueSemVolta = configuracao?.estoqueHabilitado === true && configuracao.estoqueComMovimentos
 
@@ -229,13 +223,11 @@ export function TelaDeConfiguracao() {
         {estoqueSemVolta
           ? <p>Já houve movimento de estoque, e o controle não pode mais ser desligado.</p>
           : <p>Depois do primeiro movimento de estoque, o controle não pode ser desligado.</p>}
-        {semPlanoParaLigar && <p>O controle de estoque faz parte do plano Completo, sem
-          suspensão. Veja a tela <Link to="/plano">Plano</Link>.</p>}
         {/* Botão comum, e não interruptor: o texto diz a ação, e um interruptor seria lido como
             "Desligar controle de estoque, ligado". O estado está no parágrafo acima. Secundário,
             como o do NSU: a ação principal da página é salvar o que se digita. */}
         {!estoqueSemVolta && <button className="botao botao--secundario" type="button"
-          disabled={salvando !== null || semPlanoParaLigar}
+          disabled={salvando !== null}
           onClick={() => void mudar('estoque', () => contas.definirEstoque(!configuracao.estoqueHabilitado))}>
           {salvando === 'estoque' ? 'Salvando...'
             : configuracao.estoqueHabilitado ? 'Desligar controle de estoque' : 'Ligar controle de estoque'}

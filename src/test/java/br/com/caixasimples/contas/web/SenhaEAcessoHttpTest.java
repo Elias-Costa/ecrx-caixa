@@ -11,7 +11,6 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.VerificadorDeSenhaVazadaFalso;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.contas.internal.VerificadorDeSenhaVazada;
 import br.com.caixasimples.sincronizacao.GestoDeTeste;
 import java.time.Duration;
@@ -68,7 +67,7 @@ class SenhaEAcessoHttpTest extends TesteDeIntegracao {
     @DisplayName("o ADMIN único troca a senha: os outros aparelhos dele recebem 401, este segue com o token novo")
     void adminUnicoTrocaASenha() throws Exception {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String emailDoOperador = criarOperador(entrar(conta.email(), SENHA)).email();
         ContaCriada outraConta = criador.criar("Loja da Esquina", SENHA);
 
@@ -145,7 +144,7 @@ class SenhaEAcessoHttpTest extends TesteDeIntegracao {
     @DisplayName("com a lista de vazadas fora do ar, a troca pela própria pessoa entra e a redefinição não")
     void listaForaDoAr() throws Exception {
         ContaCriada conta = criador.criar("Armazém do Centro", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         UUID operador = criarOperador(admin).id();
 
@@ -175,7 +174,7 @@ class SenhaEAcessoHttpTest extends TesteDeIntegracao {
     @DisplayName("o ADMIN redefine a senha do operador: os aparelhos dele saem e a senha provisória entra")
     void adminRedefineASenhaDoOperador() throws Exception {
         ContaCriada conta = criador.criar("Loja das Palmeiras", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         OperadorCriado operador = criarOperador(admin);
         String emailDoOperador = operador.email();
@@ -200,7 +199,7 @@ class SenhaEAcessoHttpTest extends TesteDeIntegracao {
     @DisplayName("redefinir a senha de um ADMIN ou de um inativo responde 409; o operador não redefine, 403")
     void redefinicaoRecusada() throws Exception {
         ContaCriada conta = criador.criar("Empório do Bairro", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         OperadorCriado criado = criarOperador(admin);
         UUID operador = criado.id();
@@ -225,7 +224,7 @@ class SenhaEAcessoHttpTest extends TesteDeIntegracao {
     @DisplayName("o ADMIN de outra Conta recebe 404 ao redefinir a senha de um operador, como para um id que não existe")
     void redefinicaoNaoAtravessaConta() throws Exception {
         ContaCriada conta = criador.criar("Padaria do Porto", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         OperadorCriado operador = criarOperador(entrar(conta.email(), SENHA));
         String aparelhoDoOperador = entrar(operador.email(), SENHA);
         ContaCriada outraConta = criador.criar("Loja do Cais", SENHA);

@@ -16,6 +16,7 @@ import { enviarFila } from '../offline/envio'
 import { gravarIdentidade, gravarToken } from '../sessao/armazenamento'
 import { tokenComExpiracao } from '../sessao/tokenDeTeste'
 import { SessaoContext } from '../sessao/contexto'
+import type { Identidade } from '../sessao/Identidade'
 import { SincronizacaoContext, useEnvioAutomatico } from '../shell/sincronizacao'
 import { confirmacaoAberta, responderConfirmacao } from './confirmacaoDeTeste'
 import { TelaDeCaixa } from './TelaDeCaixa'
@@ -52,14 +53,20 @@ function entrarComoAna() {
   gravarIdentidade(ANA)
 }
 
-function mostrar(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR') {
+/** O plano no só leitura desde 19/09/2026, depois do teste vencido em 15/09. */
+const SO_LEITURA: Partial<Identidade> = {
+  plano: 'COMPLETO', situacaoDoPlano: 'SOMENTE_LEITURA', vencimentoDoPlano: '2026-09-15',
+  inicioDaSuspensao: '2026-09-19',
+}
+
+function mostrar(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR', plano: Partial<Identidade> = {}) {
   gravarToken(tokenComExpiracao(new Date(Date.now() + 60 * 60 * 1000)))
   gravarIdentidade({ usuarioId: 'u-1', nome: 'Ana', perfil, contaId: 'c-1',
-    nomeNegocio: 'Loja da Esquina', estoqueHabilitado: false })
+    nomeNegocio: 'Loja da Esquina', estoqueHabilitado: false, ...plano })
   render(<SessaoContext.Provider value={{
     identidade: {
       usuarioId: 'u-1', nome: 'Ana', perfil, contaId: 'c-1',
-      nomeNegocio: 'Loja da Esquina', estoqueHabilitado: false,
+      nomeNegocio: 'Loja da Esquina', estoqueHabilitado: false, ...plano,
     },
     entrar: vi.fn(), sair: vi.fn(), atualizarIdentidade: vi.fn(), relerIdentidade: vi.fn(),
   }}><TelaDeCaixa /></SessaoContext.Provider>)
@@ -124,6 +131,32 @@ describe('caixa na tela', () => {
     fireEvent.change(campo, { target: { value: '150,50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Abrir caixa' }))
     await waitFor(() => expect(abrir).toHaveBeenCalledWith(150.5, expect.any(String)))
+  })
+
+  it('com a Conta só leitura e sem caixa aberto, a tela não oferece abrir um', async () => {
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(undefined)
+    vi.spyOn(caixa, 'historico').mockResolvedValue([])
+    const abrir = vi.spyOn(caixa, 'abrir')
+    mostrar('OPERADOR', SO_LEITURA)
+
+    expect(await screen.findByText('Nenhum caixa aberto para você.')).toBeInTheDocument()
+    expect(screen.getByText('Com a Conta só leitura, abrir caixa volta depois do pagamento do plano.'))
+      .toBeInTheDocument()
+    expect(screen.queryByLabelText('Valor inicial')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir caixa' })).not.toBeInTheDocument()
+    expect(abrir).not.toHaveBeenCalled()
+  })
+
+  it('com a Conta só leitura, o caixa aberto continua fechando, sem sangria nem suprimento', async () => {
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(caixa, 'historico').mockResolvedValue([aberta])
+    vi.spyOn(caixa, 'consultar').mockResolvedValue({ ...aberta, movimentos: [] })
+    mostrar('OPERADOR', SO_LEITURA)
+
+    expect(await screen.findByRole('heading', { name: 'Fechar caixa' })).toBeInTheDocument()
+    expect(screen.getByText(/Com a Conta só leitura, sangria e suprimento voltam/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Lançar movimento' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Registrar sangria' })).not.toBeInTheDocument()
   })
 
   it('lança sangria com motivo e valor informado', async () => {

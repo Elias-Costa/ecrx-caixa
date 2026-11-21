@@ -14,7 +14,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.shared.FusoDeReferencia;
@@ -59,9 +58,9 @@ class ConferenciaDoCartaoHttpTest extends TesteDeIntegracao {
     @Test
     void administradorListaOCartaoDoDiaComONsuOuAFaltaDele() throws Exception {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ContaCriada outra = criador.criar("Loja da Esquina", SENHA);
-        criador.contratar(outra.contaId(), Plano.COMPLETO);
+        criador.contratar(outra.contaId());
         UUID caixa = conta.comoUsuario(() -> caixas.abrir(Money.ZERO));
         UUID caixaDaOutra = outra.comoUsuario(() -> caixas.abrir(Money.ZERO));
         UUID comNsu = vendaNoCartao(conta, caixa, StatusVenda.CONCLUIDA, LocalTime.of(9, 0),
@@ -109,15 +108,16 @@ class ConferenciaDoCartaoHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void recusaOperadorPlanoSemRelatorioEParametroInvalido() throws Exception {
+    void recusaOperadorEValeNoTesteEParametroInvalido() throws Exception {
         ContaCriada conta = criador.criar("Padaria Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ContaCriada operador = criador.criar("Ponto do Operador", SENHA, Perfil.OPERADOR, true);
-        criador.contratar(operador.contaId(), Plano.COMPLETO);
-        ContaCriada gratis = criador.criar("Banca Aurora", SENHA);
+        criador.contratar(operador.contaId());
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
 
         conferencia(operador, DIA, null).andExpect(status().isForbidden());
-        conferencia(gratis, DIA, null).andExpect(status().isConflict());
+        // A Conta nova, no teste, já tem os relatórios.
+        conferencia(noTeste, DIA, null).andExpect(status().isOk());
         http.perform(get("/api/relatorios/conferencia-do-cartao")
                         .with(autenticador.como(conta)))
                 .andExpect(status().isBadRequest());

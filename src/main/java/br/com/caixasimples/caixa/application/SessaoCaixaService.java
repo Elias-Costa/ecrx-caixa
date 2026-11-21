@@ -8,6 +8,7 @@ import br.com.caixasimples.caixa.domain.MovimentoCaixa;
 import br.com.caixasimples.caixa.internal.LinhaDoHistorico;
 import br.com.caixasimples.caixa.internal.SessaoCaixaEntity;
 import br.com.caixasimples.caixa.internal.SessaoCaixaRepository;
+import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.TenantContext;
@@ -53,16 +54,24 @@ import org.springframework.transaction.annotation.Transactional;
  * fecha o caixa do atendente que foi embora. Cada caso de uso pergunta isso por
  * {@code exigirDonoOuAdmin} logo depois de carregar a sessão, e o {@code @TenantId} continua
  * garantindo, antes disso, que a sessão é da própria conta.
+ *
+ * <p><strong>A Conta só leitura não abre caixa nem mexe no dinheiro dele</strong>: abrir, sangria e
+ * suprimento perguntam a {@link ContaService#exigirOperacao} pelo instante em que o gesto foi feito,
+ * depois de conferir se ele já estava gravado. Fechar não pergunta, porque o dinheiro que está na
+ * gaveta precisa ser conferido.
  */
 @Service
 public class SessaoCaixaService {
 
     private final SessaoCaixaRepository sessoes;
     private final ApplicationEventPublisher eventos;
+    private final ContaService contas;
 
-    SessaoCaixaService(SessaoCaixaRepository sessoes, ApplicationEventPublisher eventos) {
+    SessaoCaixaService(SessaoCaixaRepository sessoes, ApplicationEventPublisher eventos,
+            ContaService contas) {
         this.sessoes = sessoes;
         this.eventos = eventos;
+        this.contas = contas;
     }
 
     /**
@@ -84,6 +93,8 @@ public class SessaoCaixaService {
      * @throws br.com.caixasimples.shared.UsuarioNaoResolvidoException se não há usuário no contexto
      * @throws OperadorJaTemCaixaAbertoException se o operador já tem uma sessão ABERTA
      * @throws IllegalArgumentException          se {@code valorAbertura} é negativo
+     * @throws br.com.caixasimples.contas.application.ContaSomenteLeituraException se a Conta está
+     *         só leitura
      */
     @Transactional
     public UUID abrir(Money valorAbertura) {
@@ -123,6 +134,7 @@ public class SessaoCaixaService {
             throw new IllegalStateException(
                     "Esta abertura já foi registrada com outro valor ou por outro operador.");
         }
+        contas.exigirOperacao(abertaEm);
 
         if (sessoes.existsByUsuarioIdAndStatus(usuarioId, StatusSessaoCaixa.ABERTA)) {
             throw new OperadorJaTemCaixaAbertoException(usuarioId);
@@ -160,6 +172,7 @@ public class SessaoCaixaService {
         SessaoCaixaEntity linha = buscar(sessaoId);
         SessaoCaixa sessao = linha.paraDominio();
         UsuarioContext.exigirDonoOuAdmin(sessao.getUsuarioId());
+        contas.exigirOperacao(criadoEm);
 
         sessao.sangrar(valor, motivo, criadoEm, UsuarioContext.exigirAtual().usuarioId());
 
@@ -233,6 +246,7 @@ public class SessaoCaixaService {
             }
             return;
         }
+        contas.exigirOperacao(criadoEm);
         UUID lancadoPor = UsuarioContext.exigirAtual().usuarioId();
         if (tipo == TipoMovimentoCaixa.SANGRIA) {
             sessao.sangrar(movimentoId, valor, motivo, criadoEm, lancadoPor);
@@ -249,6 +263,7 @@ public class SessaoCaixaService {
         SessaoCaixaEntity linha = buscar(sessaoId);
         SessaoCaixa sessao = linha.paraDominio();
         UsuarioContext.exigirDonoOuAdmin(sessao.getUsuarioId());
+        contas.exigirOperacao(criadoEm);
 
         sessao.suprir(valor, motivo, criadoEm, UsuarioContext.exigirAtual().usuarioId());
 

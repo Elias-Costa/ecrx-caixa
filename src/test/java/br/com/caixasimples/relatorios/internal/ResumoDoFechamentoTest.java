@@ -15,7 +15,6 @@ import br.com.caixasimples.cadastro.internal.ClienteService;
 import br.com.caixasimples.cadastro.internal.ClienteService.DadosDoCliente;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.contas.application.UsuarioService;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
@@ -120,7 +119,7 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     @DisplayName("o resumo da sessão sai com os números só dela, sem nome de pessoa nem motivo de sangria")
     void conteudoDaSessao() {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         Catalogo catalogo = cadastrarCatalogo(conta);
         UUID sessaoId = conta.comoUsuario(() -> caixas.abrir(UUID.randomUUID(), Money.de("50.00"),
                 noBalcao(LocalTime.of(8, 0))));
@@ -196,7 +195,7 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     @DisplayName("recebem os ADMIN ativos, cada um num envio; o OPERADOR que fechou e o ADMIN bloqueado não")
     void soOsAdministradoresAtivos() {
         ContaCriada conta = criador.criar("Padaria Central", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String outroAdmin = "segundo-" + UUID.randomUUID() + "@exemplo.test";
         String bloqueado = "bloqueado-" + UUID.randomUUID() + "@exemplo.test";
         String operador = "operador-" + UUID.randomUUID() + "@exemplo.test";
@@ -231,7 +230,7 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     @DisplayName("o envio que falha não desfaz o fechamento, e o reenvio manda uma vez quando o SES volta")
     void falhaNaoDesfazOFechamentoEOReenvioManda(CapturedOutput saida) {
         ContaCriada conta = criador.criar("Mercearia Boa Vista", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ses.ficarForaDoAr();
 
         UUID sessaoId = conta.comoUsuario(() -> {
@@ -270,7 +269,7 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     @DisplayName("passadas 24 horas do fechamento, a entrega desiste sem enviar e deixa uma linha de erro")
     void desisteDepoisDoPrazo(CapturedOutput saida) {
         ContaCriada conta = criador.criar("Empório do Bairro", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UUID sessaoId = UUID.randomUUID();
         SessaoCaixaFechada antigo = new SessaoCaixaFechada(conta.contaId(), sessaoId,
                 Instant.now().minus(ResumoDoFechamentoListener.PRAZO_DA_REENTREGA)
@@ -286,19 +285,22 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("o plano gratuito e o completo com os recursos suspensos não recebem o resumo")
-    void soOCompletoEmDia() {
-        ContaCriada gratuita = criador.criar("Banca da Feira", SENHA_DE_TESTE);
-        ContaCriada suspensa = criador.criar("Loja da Esquina", SENHA_DE_TESTE);
-        criador.contratar(suspensa.contaId(), Plano.COMPLETO);
-        criador.vencerPlano(suspensa.contaId(), 8);
+    @DisplayName("no teste e no só leitura o resumo chega: o caixa fechado é histórico")
+    void testeESomenteLeituraRecebem() {
+        ContaCriada noTeste = criador.criar("Banca da Feira", SENHA_DE_TESTE);
+        ContaCriada somenteLeitura = criador.criar("Loja da Esquina", SENHA_DE_TESTE);
+        // O caixa abre antes do só leitura, que não abre caixa, e fecha já nele.
+        UUID daSomenteLeitura = somenteLeitura.comoUsuario(() -> caixas.abrir(Money.ZERO));
+        criador.deixarSomenteLeitura(somenteLeitura.contaId());
 
-        UUID daGratuita = abrirEFechar(gratuita);
-        UUID daSuspensa = abrirEFechar(suspensa);
+        UUID doTeste = abrirEFechar(noTeste);
+        somenteLeitura.comoUsuario(() -> caixas.fechar(daSomenteLeitura, Money.ZERO));
 
-        esperarConcluida(daGratuita);
-        esperarConcluida(daSuspensa);
-        assertThat(ses.pedidos()).isEmpty();
+        esperarConcluida(doTeste);
+        esperarConcluida(daSomenteLeitura);
+        assertThat(ses.pedidos())
+                .extracting(pedido -> pedido.destination().toAddresses())
+                .containsExactlyInAnyOrder(List.of(noTeste.email()), List.of(somenteLeitura.email()));
     }
 
     @Test
@@ -306,8 +308,8 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     void isolamentoEntreContas() {
         ContaCriada contaA = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
         ContaCriada contaB = criador.criar("Padaria Central", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
+        criador.contratar(contaB.contaId());
         UUID sessaoA = abrirComVenda(contaA, "Croissant da Aurora", "7.00");
         UUID sessaoB = abrirComVenda(contaB, "Sonho da Central", "11.00");
 
@@ -333,8 +335,8 @@ class ResumoDoFechamentoTest extends TesteDeIntegracao {
     void consultasFiltradasPelaConta() {
         ContaCriada contaA = criador.criar("Cafeteria Aurora", SENHA_DE_TESTE);
         ContaCriada contaB = criador.criar("Padaria Central", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
+        criador.contratar(contaB.contaId());
         UUID sessaoA = abrirComVenda(contaA, "Croissant da Aurora", "7.00");
         // Uma venda da Conta B que aponta para a sessão da Conta A: a chave estrangeira não exige a
         // mesma Conta, e só o filtro de cada mapeamento a deixa fora do resumo de A.

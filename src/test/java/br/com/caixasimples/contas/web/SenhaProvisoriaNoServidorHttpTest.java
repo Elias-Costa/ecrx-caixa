@@ -11,7 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.sincronizacao.GestoDeTeste;
 import java.util.List;
 import java.util.Map;
@@ -116,7 +115,7 @@ class SenhaProvisoriaNoServidorHttpTest extends TesteDeIntegracao {
     @DisplayName("a senha redefinida pelo administrador volta a ser provisória e barra o operador até a troca")
     void redefinicaoVoltaABarrar() throws Exception {
         ContaCriada conta = criador.criar("Mercado Aurora", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String admin = entrar(conta.email(), SENHA);
         String email = "operador-" + UUID.randomUUID() + "@exemplo.test";
         UUID operador = criarOperador(admin, email);
@@ -143,7 +142,7 @@ class SenhaProvisoriaNoServidorHttpTest extends TesteDeIntegracao {
     @DisplayName("a senha provisória de um usuário numa Conta não barra o usuário de outra Conta, nem o administrador da própria")
     void aMarcaNaoAtravessaConta() throws Exception {
         ContaCriada contaA = criador.criar("Empório Aurora", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         String adminA = entrar(contaA.email(), SENHA);
         String emailDoOperador = "operador-" + UUID.randomUUID() + "@exemplo.test";
         criarOperador(adminA, emailDoOperador);
@@ -166,7 +165,7 @@ class SenhaProvisoriaNoServidorHttpTest extends TesteDeIntegracao {
     /** Um operador criado pelo administrador, cuja senha nasce provisória; devolve o e-mail. */
     private String operadorComSenhaProvisoria(String negocio) throws Exception {
         ContaCriada conta = criador.criar(negocio, SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "operador-" + UUID.randomUUID() + "@exemplo.test";
         criarOperador(entrar(conta.email(), SENHA), email);
         return email;

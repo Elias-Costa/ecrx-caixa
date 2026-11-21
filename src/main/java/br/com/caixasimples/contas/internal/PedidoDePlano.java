@@ -34,7 +34,10 @@ import org.hibernate.annotations.TenantId;
 @Table(name = "pedido_de_plano")
 public class PedidoDePlano {
 
-    /** Adesão sai do plano gratuito; renovação paga um mês do plano pago. */
+    /**
+     * Renovação paga o mês que começa no vencimento, no teste também; adesão é o pagamento da Conta
+     * em só leitura, e o ciclo recomeça no dia em que o código é aplicado.
+     */
     public enum Tipo {
         ADESAO,
         RENOVACAO

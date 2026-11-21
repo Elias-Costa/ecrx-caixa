@@ -1,26 +1,31 @@
 package br.com.caixasimples.contas;
 
 /**
- * Onde a Conta está no ciclo mensal do plano pago, no dia de hoje do balcão.
+ * Onde a Conta está no dia de hoje do balcão, no teste ou num período pago.
  *
- * <p>A tolerância depois do vencimento é igual ao aviso antes dele: sete dias. Com vencimento no
- * dia 10, o aviso começa no dia 3, os recursos pagos seguem até o dia 17 e ficam suspensos a
- * partir do dia 18, se não houver renovação.
+ * <p>O aviso começa sete dias antes do vencimento de um período pago e três antes do fim do teste.
+ * Depois do vencimento há três dias úteis de tolerância, com tudo funcionando; no dia seguinte ao
+ * terceiro, a Conta fica só leitura até o pagamento. Com vencimento numa sexta, a tolerância vai até
+ * a quarta, e o só leitura começa na quinta.
+ *
+ * <p>O aplicativo instalado também conhece dois valores que o servidor não manda mais, o do plano
+ * sem mensalidade e o da suspensão dos recursos pagos, porque guarda a identidade que leu antes.
  */
 public enum SituacaoDoPlano {
 
-    /** Plano gratuito: não há o que vencer. */
-    SEM_MENSALIDADE,
-
-    /** Mais de sete dias até o vencimento. */
+    /** Antes do aviso. */
     EM_DIA,
 
-    /** Do sétimo dia antes do vencimento até a véspera: o administrador vê o aviso. */
+    /** Do primeiro dia do aviso até a véspera do vencimento: o administrador vê o aviso. */
     A_VENCER,
 
-    /** Do dia do vencimento ao sétimo dia depois dele, com os recursos pagos ainda ativos. */
+    /** Do dia do vencimento ao terceiro dia útil depois dele, com tudo ainda funcionando. */
     VENCIDO,
 
-    /** A partir do oitavo dia depois do vencimento: os recursos pagos param até a renovação. */
-    SUSPENSO
+    /**
+     * A partir do dia seguinte ao terceiro dia útil depois do vencimento, até o pagamento: a Conta não
+     * começa venda, não abre caixa nem mexe no dinheiro dele, mas fecha o caixa aberto, consulta tudo
+     * e mantém o cadastro.
+     */
+    SOMENTE_LEITURA
 }

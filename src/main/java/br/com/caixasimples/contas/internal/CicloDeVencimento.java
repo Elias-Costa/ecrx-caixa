@@ -1,31 +1,55 @@
 package br.com.caixasimples.contas.internal;
 
 import br.com.caixasimples.contas.SituacaoDoPlano;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Objects;
 
 /**
- * As datas do ciclo mensal do plano pago.
+ * As datas do teste e do ciclo mensal do plano.
  *
  * <p>Só data e aritmética, sem relógio: quem chama informa o dia de hoje no fuso do balcão, o que
  * deixa cada regra verificável com uma data fixa.
  *
- * <p>O plano vence todo mês no dia da adesão. Num mês que não tem esse dia, vence no último, e o
- * mês seguinte volta ao dia original: com adesão em 31 de janeiro, vence em 28 de fevereiro e em
- * 31 de março. Cada período vai de um vencimento, inclusive, ao seguinte, exclusive. Pagamento
- * atrasado não desloca o ciclo: a renovação paga o período que venceu, não um mês a partir dela.
+ * <p>Toda Conta começa num teste de quatorze dias, que vence como um período pago: o fim do teste é
+ * o primeiro vencimento, e o dia dele passa a ser o dia do vencimento de todos os meses. Num mês que
+ * não tem esse dia, vence no último, e o mês seguinte volta ao dia original: com vencimento em 31 de
+ * janeiro, vence em 28 de fevereiro e em 31 de março. Cada período vai de um vencimento, inclusive,
+ * ao seguinte, exclusive.
+ *
+ * <p>Depois de cada vencimento há três dias úteis de tolerância, de segunda a sexta, e o feriado
+ * conta como dia útil: o calendário de feriados muda de cidade para cidade, e a regra precisa ser a
+ * mesma para todas. No dia seguinte ao terceiro, a Conta fica só leitura até pagar.
  */
 public final class CicloDeVencimento {
 
-    /** Dias antes do vencimento em que o aviso ao administrador começa. */
+    /** A duração do teste, contada do dia em que a Conta é criada. */
+    public static final int DIAS_DO_TESTE = 14;
+
+    /** Dias antes do vencimento de um período pago em que o aviso ao administrador começa. */
     public static final int DIAS_DE_AVISO = 7;
 
-    /** Dias depois do vencimento em que os recursos pagos continuam ativos sem renovação. */
-    public static final int DIAS_DE_TOLERANCIA = 7;
+    /**
+     * Dias antes do fim do teste em que o aviso começa. É mais curto que o do período pago porque o
+     * teste inteiro tem duas semanas: com sete dias, metade dele seria de aviso.
+     */
+    public static final int DIAS_DE_AVISO_DO_TESTE = 3;
+
+    /** Dias úteis depois do vencimento em que a Conta ainda vende sem o pagamento. */
+    public static final int DIAS_UTEIS_DE_TOLERANCIA = 3;
 
     private CicloDeVencimento() {
         // so datas
+    }
+
+    /**
+     * O fim do teste de uma Conta criada no dia informado: o primeiro dia sem ele, que é o primeiro
+     * vencimento. Criada em 1º de dezembro, o teste vai até o dia 14 e vence no dia 15.
+     */
+    public static LocalDate fimDoTeste(LocalDate diaDaCriacao) {
+        Objects.requireNonNull(diaDaCriacao, "dia da criacao nao pode ser nulo");
+        return diaDaCriacao.plusDays(DIAS_DO_TESTE);
     }
 
     /** O vencimento de um mês: o dia do ciclo, ou o último dia do mês, se o mês for mais curto. */
@@ -38,56 +62,69 @@ public final class CicloDeVencimento {
     }
 
     /**
-     * O vencimento do mês seguinte ao de uma data do ciclo. Da adesão, dá o primeiro vencimento; de
-     * um vencimento, o fim do período que começa nele.
+     * O vencimento do mês seguinte ao de uma data do ciclo. Do dia em que o ciclo recomeça, dá o
+     * primeiro vencimento; de um vencimento, o fim do período que começa nele.
      */
     public static LocalDate seguinte(LocalDate dataDoCiclo, int diaDoCiclo) {
         return vencimentoNoMes(YearMonth.from(dataDoCiclo).plusMonths(1), diaDoCiclo);
     }
 
-    /** O primeiro dia sem os recursos pagos, se não houver renovação: o oitavo depois do vencimento. */
-    public static LocalDate inicioDaSuspensao(LocalDate vencimento) {
-        return vencimento.plusDays(DIAS_DE_TOLERANCIA + 1);
+    /**
+     * O primeiro dia em só leitura, se o pagamento não chegar: o dia seguinte ao terceiro dia útil
+     * depois do vencimento. Com vencimento numa sexta, a tolerância vai até a quarta, e o só leitura
+     * começa na quinta.
+     */
+    public static LocalDate inicioDoSomenteLeitura(LocalDate vencimento) {
+        Objects.requireNonNull(vencimento, "vencimento nao pode ser nulo");
+        LocalDate dia = vencimento;
+        int uteis = 0;
+        while (uteis < DIAS_UTEIS_DE_TOLERANCIA) {
+            dia = dia.plusDays(1);
+            if (diaUtil(dia)) {
+                uteis++;
+            }
+        }
+        return dia.plusDays(1);
+    }
+
+    private static boolean diaUtil(LocalDate dia) {
+        DayOfWeek semana = dia.getDayOfWeek();
+        return semana != DayOfWeek.SATURDAY && semana != DayOfWeek.SUNDAY;
     }
 
     /**
-     * Onde o plano pago está no dia de hoje.
+     * Onde a Conta está no dia de hoje.
      *
-     * @param vencimento o fim, exclusive, do último período pago
+     * @param vencimento o fim, exclusive, do teste ou do último período pago
+     * @param emTeste    se nenhum período foi pago ainda, o que encurta o aviso
      */
-    public static SituacaoDoPlano situacao(LocalDate vencimento, LocalDate hoje) {
+    public static SituacaoDoPlano situacao(LocalDate vencimento, boolean emTeste, LocalDate hoje) {
         Objects.requireNonNull(vencimento, "vencimento nao pode ser nulo");
         Objects.requireNonNull(hoje, "hoje nao pode ser nulo");
-        if (hoje.isBefore(vencimento.minusDays(DIAS_DE_AVISO))) {
+        int diasDeAviso = emTeste ? DIAS_DE_AVISO_DO_TESTE : DIAS_DE_AVISO;
+        if (hoje.isBefore(vencimento.minusDays(diasDeAviso))) {
             return SituacaoDoPlano.EM_DIA;
         }
         if (hoje.isBefore(vencimento)) {
             return SituacaoDoPlano.A_VENCER;
         }
-        if (hoje.isBefore(inicioDaSuspensao(vencimento))) {
+        if (hoje.isBefore(inicioDoSomenteLeitura(vencimento))) {
             return SituacaoDoPlano.VENCIDO;
         }
-        return SituacaoDoPlano.SUSPENSO;
+        return SituacaoDoPlano.SOMENTE_LEITURA;
     }
 
     /**
-     * O período que uma renovação pedida hoje paga.
+     * O período que uma renovação paga: o que começa no vencimento ainda não pago, mesmo antes dele,
+     * para quem renova adiantado. Quem paga na tolerância paga o mês que venceu e fica com o dia do
+     * vencimento, porque usou a Conta nesses dias. No só leitura o pagamento não é renovação: o
+     * ciclo recomeça no dia em que o código é aplicado.
      *
-     * <p>É o que começa no vencimento ainda não pago, mesmo antes dele, para quem renova adiantado.
-     * Com mais de um período vencido, é o corrente, o que contém hoje: pagar o mês corrente basta
-     * para voltar a ter os recursos, e os meses anteriores ficam sem pagar.
-     *
-     * @param vencimento o fim, exclusive, do último período pago
+     * @param vencimento o fim, exclusive, do teste ou do último período pago
      */
-    public static Periodo periodoDaRenovacao(LocalDate vencimento, int diaDoCiclo, LocalDate hoje) {
-        Objects.requireNonNull(hoje, "hoje nao pode ser nulo");
-        LocalDate inicio = vencimento;
-        LocalDate fim = seguinte(inicio, diaDoCiclo);
-        while (!hoje.isBefore(fim)) {
-            inicio = fim;
-            fim = seguinte(inicio, diaDoCiclo);
-        }
-        return new Periodo(inicio, fim);
+    public static Periodo periodoDaRenovacao(LocalDate vencimento, int diaDoCiclo) {
+        Objects.requireNonNull(vencimento, "vencimento nao pode ser nulo");
+        return new Periodo(vencimento, seguinte(vencimento, diaDoCiclo));
     }
 
     /**

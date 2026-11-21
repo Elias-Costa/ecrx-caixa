@@ -65,7 +65,10 @@ export type EstadoDoPlano = {
   plano: Plano
   situacao: SituacaoDoPlano
   vencimento?: string
+  /** O primeiro dia em só leitura, se o pagamento não chegar até lá. */
   inicioDaSuspensao?: string
+  /** Se nenhum período foi pago ainda, e o vencimento é o fim do teste. */
+  emTeste: boolean
   recursos: RecursoDoPlano[]
   mensalidadeCompleto: number
   propostas: PropostaDePlano[]

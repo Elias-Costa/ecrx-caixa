@@ -1,8 +1,8 @@
 package br.com.caixasimples.contas.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.empty;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -32,10 +32,13 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * A troca de plano pela API, com o token de verdade: o caminho da tela do plano, os códigos de
- * status de cada recusa e a identidade que o aplicativo lê ao abrir.
+ * O pagamento do plano pela API, com o token de verdade: o caminho da tela do plano, os códigos de
+ * status de cada recusa e a identidade que o aplicativo lê ao abrir, com os campos que o aplicativo
+ * instalado antes do plano único continua lendo.
  */
 class PlanoHttpTest extends TesteDeIntegracao {
+
+    private static final String[] TODOS = {"RELATORIOS", "ESTOQUE", "MULTIUSUARIO", "PIX_INTEGRADO"};
 
     private static final String SENHA = "uma senha longa de teste";
 
@@ -55,31 +58,47 @@ class PlanoHttpTest extends TesteDeIntegracao {
     private AssinaturaDePedido assinatura;
 
     @Test
-    @DisplayName("o administrador pede, recebe o pedido e aplica o código; a identidade passa a trazer o plano")
+    @DisplayName("no teste, o administrador pede o primeiro mês, recebe o pedido e aplica o código; a identidade passa a trazer o mês pago")
     void pedidoECodigoPelaApi() throws Exception {
         ContaCriada conta = criador.criar("Cafeteria Aurora", SENHA);
         RequestPostProcessor admin = autenticador.como(conta);
+        LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
+        LocalDate fim = CicloDeVencimento.fimDoTeste(hoje);
+        LocalDate pago = CicloDeVencimento.seguinte(fim, fim.getDayOfMonth());
 
         http.perform(get("/api/conta/plano").with(admin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("GRATIS"))
-                .andExpect(jsonPath("$.situacao").value("SEM_MENSALIDADE"))
-                .andExpect(jsonPath("$.vencimento").doesNotExist())
-                .andExpect(jsonPath("$.recursos", empty()))
+                .andExpect(jsonPath("$.plano").value("COMPLETO"))
+                .andExpect(jsonPath("$.situacao").value("EM_DIA"))
+                .andExpect(jsonPath("$.emTeste").value(true))
+                .andExpect(jsonPath("$.vencimento").value(fim.toString()))
+                .andExpect(jsonPath("$.inicioDaSuspensao")
+                        .value(CicloDeVencimento.inicioDoSomenteLeitura(fim).toString()))
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)))
                 .andExpect(jsonPath("$.mensalidadeCompleto").value(70.0))
                 .andExpect(jsonPath("$.mensalidadeCaixaSimples").doesNotExist())
                 .andExpect(jsonPath("$.propostas.length()").value(1))
-                .andExpect(jsonPath("$.propostas[0].tipo").value("ADESAO"))
+                .andExpect(jsonPath("$.propostas[0].tipo").value("RENOVACAO"))
                 .andExpect(jsonPath("$.propostas[0].plano").value("COMPLETO"))
+                .andExpect(jsonPath("$.propostas[0].periodoInicio").value(fim.toString()))
+                .andExpect(jsonPath("$.propostas[0].periodoFim").value(pago.toString()))
                 .andExpect(jsonPath("$.pedidoAberto").doesNotExist());
+        // Todos os campos que o aplicativo instalado lia continuam, com o mesmo nome.
         http.perform(get("/api/auth/eu").with(admin))
-                .andExpect(jsonPath("$.plano").value("GRATIS"))
-                .andExpect(jsonPath("$.situacaoDoPlano").value("SEM_MENSALIDADE"))
-                .andExpect(jsonPath("$.vencimentoDoPlano").doesNotExist())
-                .andExpect(jsonPath("$.recursos", empty()));
+                .andExpect(jsonPath("$.plano").value("COMPLETO"))
+                .andExpect(jsonPath("$.situacaoDoPlano").value("EM_DIA"))
+                .andExpect(jsonPath("$.vencimentoDoPlano").value(fim.toString()))
+                .andExpect(jsonPath("$.inicioDaSuspensao").exists())
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)))
+                .andExpect(jsonPath("$.pixIntegrado").exists())
+                .andExpect(jsonPath("$.termosPendentes").exists())
+                .andExpect(jsonPath("$.emTeste").value(true));
 
+        // O pedido vai no corpo de antes: só o plano.
         JsonNode pedido = pedir(admin, "COMPLETO");
         UUID pedidoId = UUID.fromString(pedido.path("id").asText());
+        assertThat(pedido.path("tipo").asText()).isEqualTo("RENOVACAO");
+        assertThat(pedido.path("periodoInicio").asText()).isEqualTo(fim.toString());
         String codigo = assinatura.codigo(pedidoId, Plano.COMPLETO, Money.de(MENSALIDADE_COMPLETO));
 
         http.perform(aplicar(admin, pedidoId, "0000-0000-0000-0000"))
@@ -95,24 +114,20 @@ class PlanoHttpTest extends TesteDeIntegracao {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.plano").value("COMPLETO"))
                 .andExpect(jsonPath("$.situacao").value("EM_DIA"))
-                .andExpect(jsonPath("$.recursos",
-                        containsInAnyOrder("RELATORIOS", "ESTOQUE", "MULTIUSUARIO",
-                                "PIX_INTEGRADO")))
-                .andExpect(jsonPath("$.vencimento").exists())
+                .andExpect(jsonPath("$.emTeste").value(false))
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)))
+                .andExpect(jsonPath("$.vencimento").value(pago.toString()))
                 .andExpect(jsonPath("$.pedidoAberto").doesNotExist());
         http.perform(aplicar(admin, pedidoId, codigo))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("COMPLETO"));
+                .andExpect(jsonPath("$.vencimento").value(pago.toString()));
 
-        LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
         http.perform(get("/api/auth/eu").with(admin))
                 .andExpect(jsonPath("$.plano").value("COMPLETO"))
                 .andExpect(jsonPath("$.situacaoDoPlano").value("EM_DIA"))
-                .andExpect(jsonPath("$.vencimentoDoPlano").exists())
-                .andExpect(jsonPath("$.inicioDaSuspensao").exists())
-                .andExpect(jsonPath("$.recursos",
-                        containsInAnyOrder("RELATORIOS", "ESTOQUE", "MULTIUSUARIO",
-                                "PIX_INTEGRADO")));
+                .andExpect(jsonPath("$.emTeste").value(false))
+                .andExpect(jsonPath("$.vencimentoDoPlano").value(pago.toString()))
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)));
         http.perform(get("/api/relatorios/faturamento/dia").param("dia", hoje.toString())
                         .with(admin))
                 .andExpect(status().isOk());
@@ -151,103 +166,90 @@ class PlanoHttpTest extends TesteDeIntegracao {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plano\":\"CAIXA_SIMPLES\"}"))
                 .andExpect(status().isBadRequest());
+        // O aplicativo instalado antes ainda conhece o gratuito: a recusa é uma frase, não um 400.
         http.perform(post("/api/conta/plano/pedidos").with(admin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plano\":\"GRATIS\"}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail")
+                        .value("O plano gratuito não existe mais; o pedido é do plano Completo."));
     }
 
     @Test
-    @DisplayName("no plano grátis, relatório e estoque respondem 409 com o motivo, e o operador continua com 403")
-    void recursoForaDoPlanoResponde409() throws Exception {
+    @DisplayName("no teste, relatório e estoque respondem, e o operador continua com 403")
+    void testeTemRelatorioEEstoque() throws Exception {
         ContaCriada conta = criador.criar("Salão Aurora", SENHA);
+        criador.habilitarEstoque(conta.contaId());
         ContaCriada operador = criador.criar("Salão do Operador", SENHA, Perfil.OPERADOR, true);
-        String hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO).toString();
+        LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
 
-        http.perform(get("/api/relatorios/faturamento/dia").param("dia", hoje)
-                        .with(autenticador.como(conta)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("plano Completo")));
+        http.perform(faturamentoDoDia(conta, hoje)).andExpect(status().isOk());
         http.perform(get("/api/estoque/produtos").with(autenticador.como(conta)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("plano Completo")));
-        http.perform(get("/api/relatorios/faturamento/dia").param("dia", hoje)
-                        .with(autenticador.como(operador)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
+        http.perform(faturamentoDoDia(operador, hoje)).andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("o plano, o vencimento e a suspensão são os da Conta do token: a grátis não lê os da paga, e a paga em dia não herda a suspensão da outra (RNF05)")
+    @DisplayName("o teste, o vencimento e o só leitura são os da Conta do token: a em teste e a paga em dia não herdam o só leitura da outra (RNF05)")
     void planoEVencimentoSaoDaContaDoToken() throws Exception {
         LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
-        ContaCriada suspensa = criador.criar("Mercearia Aurora", SENHA);
-        criador.contratar(suspensa.contaId(), Plano.COMPLETO);
-        criador.vencerPlano(suspensa.contaId(), 10);
+        ContaCriada somenteLeitura = criador.criar("Mercearia Aurora", SENHA);
+        criador.contratar(somenteLeitura.contaId());
+        criador.vencerPlano(somenteLeitura.contaId(), 10);
         LocalDate vencida = hoje.minusDays(10);
-        ContaCriada gratis = criador.criar("Banca da Esquina", SENHA);
+        LocalDate desde = CicloDeVencimento.inicioDoSomenteLeitura(vencida);
+        ContaCriada noTeste = criador.criar("Banca da Esquina", SENHA);
+        LocalDate fimDoTeste = CicloDeVencimento.fimDoTeste(hoje);
         // Criada por último: quem lesse a Conta mais nova no lugar da do token leria esta.
         ContaCriada emDia = criador.criar("Café da Praça", SENHA);
-        criador.contratar(emDia.contaId(), Plano.COMPLETO);
-        LocalDate vencimentoEmDia = CicloDeVencimento.seguinte(hoje, hoje.getDayOfMonth());
+        criador.contratar(emDia.contaId());
+        LocalDate vencimentoEmDia = CicloDeVencimento.seguinte(fimDoTeste, fimDoTeste.getDayOfMonth());
 
-        // A grátis não lê o plano nem as datas das pagas, e a recusa do relatório vem do plano dela,
-        // e não da suspensão da outra.
-        http.perform(get("/api/conta/plano").with(autenticador.como(gratis)))
+        // A só leitura continua com o próprio vencimento e a data do só leitura, lê os relatórios
+        // e não abre caixa.
+        http.perform(get("/api/conta/plano").with(autenticador.como(somenteLeitura)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("GRATIS"))
-                .andExpect(jsonPath("$.situacao").value("SEM_MENSALIDADE"))
-                .andExpect(jsonPath("$.vencimento").doesNotExist())
-                .andExpect(jsonPath("$.inicioDaSuspensao").doesNotExist())
-                .andExpect(jsonPath("$.recursos", empty()));
-        http.perform(get("/api/auth/eu").with(autenticador.como(gratis)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("GRATIS"))
-                .andExpect(jsonPath("$.situacaoDoPlano").value("SEM_MENSALIDADE"))
-                .andExpect(jsonPath("$.vencimentoDoPlano").doesNotExist())
-                .andExpect(jsonPath("$.inicioDaSuspensao").doesNotExist())
-                .andExpect(jsonPath("$.recursos", empty()));
-        http.perform(faturamentoDoDia(gratis, hoje))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("plano Completo")));
-
-        // A suspensa continua com o próprio plano, o vencimento e a suspensão.
-        http.perform(get("/api/conta/plano").with(autenticador.como(suspensa)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("COMPLETO"))
-                .andExpect(jsonPath("$.situacao").value("SUSPENSO"))
+                .andExpect(jsonPath("$.situacao").value("SOMENTE_LEITURA"))
+                .andExpect(jsonPath("$.emTeste").value(false))
                 .andExpect(jsonPath("$.vencimento").value(vencida.toString()))
-                .andExpect(jsonPath("$.inicioDaSuspensao").value(vencida.plusDays(8).toString()))
-                .andExpect(jsonPath("$.recursos", empty()));
-        http.perform(get("/api/auth/eu").with(autenticador.como(suspensa)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("COMPLETO"))
-                .andExpect(jsonPath("$.situacaoDoPlano").value("SUSPENSO"))
-                .andExpect(jsonPath("$.vencimentoDoPlano").value(vencida.toString()))
-                .andExpect(jsonPath("$.inicioDaSuspensao").value(vencida.plusDays(8).toString()))
-                .andExpect(jsonPath("$.recursos", empty()));
-        http.perform(faturamentoDoDia(suspensa, hoje))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("suspensos desde")));
-
-        // A paga em dia, no mesmo plano, não herda a suspensão da outra.
-        http.perform(get("/api/conta/plano").with(autenticador.como(emDia)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("COMPLETO"))
-                .andExpect(jsonPath("$.situacao").value("EM_DIA"))
-                .andExpect(jsonPath("$.vencimento").value(vencimentoEmDia.toString()))
+                .andExpect(jsonPath("$.inicioDaSuspensao").value(desde.toString()))
                 .andExpect(jsonPath("$.recursos",
-                        containsInAnyOrder("RELATORIOS", "ESTOQUE", "MULTIUSUARIO",
-                                "PIX_INTEGRADO")));
+                        containsInAnyOrder("RELATORIOS", "ESTOQUE", "MULTIUSUARIO")))
+                .andExpect(jsonPath("$.propostas[0].tipo").value("ADESAO"));
+        http.perform(get("/api/auth/eu").with(autenticador.como(somenteLeitura)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacaoDoPlano").value("SOMENTE_LEITURA"))
+                .andExpect(jsonPath("$.vencimentoDoPlano").value(vencida.toString()))
+                .andExpect(jsonPath("$.inicioDaSuspensao").value(desde.toString()))
+                .andExpect(jsonPath("$.pixIntegrado").value(false));
+        http.perform(faturamentoDoDia(somenteLeitura, hoje)).andExpect(status().isOk());
+        http.perform(abrirCaixa(somenteLeitura))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(containsString("só leitura")));
+
+        // A em teste não lê o vencimento das outras nem herda o só leitura.
+        http.perform(get("/api/conta/plano").with(autenticador.como(noTeste)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.situacao").value("EM_DIA"))
+                .andExpect(jsonPath("$.emTeste").value(true))
+                .andExpect(jsonPath("$.vencimento").value(fimDoTeste.toString()))
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)));
+        http.perform(abrirCaixa(noTeste)).andExpect(status().isCreated());
+
+        // A paga em dia também não.
         http.perform(get("/api/auth/eu").with(autenticador.como(emDia)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.plano").value("COMPLETO"))
                 .andExpect(jsonPath("$.situacaoDoPlano").value("EM_DIA"))
+                .andExpect(jsonPath("$.emTeste").value(false))
                 .andExpect(jsonPath("$.vencimentoDoPlano").value(vencimentoEmDia.toString()))
-                .andExpect(jsonPath("$.recursos",
-                        containsInAnyOrder("RELATORIOS", "ESTOQUE", "MULTIUSUARIO",
-                                "PIX_INTEGRADO")));
-        http.perform(faturamentoDoDia(emDia, hoje))
-                .andExpect(status().isOk());
+                .andExpect(jsonPath("$.recursos", containsInAnyOrder(TODOS)));
+        http.perform(abrirCaixa(emDia)).andExpect(status().isCreated());
+    }
+
+    private RequestBuilder abrirCaixa(ContaCriada conta) {
+        return post("/api/caixa/sessoes").with(autenticador.como(conta))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"valorAbertura\":0}");
     }
 
     private RequestBuilder faturamentoDoDia(ContaCriada conta, LocalDate dia) {

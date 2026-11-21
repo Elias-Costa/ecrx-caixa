@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import type { EstadoDaConexao } from '../api/conexao'
+import { hojeNoBalcao } from '../dataDoBalcao'
 import type { Perfil } from '../sessao/Identidade'
 import { useSessao } from '../sessao/useSessao'
 import { useConfirmacao, type Pergunta } from '../telas/useConfirmacao'
@@ -25,7 +26,7 @@ const INTERVALO_DA_PROCURA_DE_VERSAO = 60 * 60 * 1000
 /**
  * A moldura de toda tela: quem está operando e em que negócio, a navegação e os avisos que
  * valem para o aplicativo inteiro (sem rede ou sem resposta do servidor, sessão para vencer, fila por
- * enviar, revisão por conferir, versão nova, vencimento do plano, caixa aberto desde outro dia), a venda recusada
+ * enviar, revisão por conferir, versão nova, vencimento e só leitura do plano, caixa aberto desde outro dia), a venda recusada
  * nas telas do balcão, e o rodapé com o
  * aviso de privacidade e os termos de uso. É também onde a fila do aparelho é enviada sozinha, uma vez para o aplicativo
  * inteiro. Os primeiros passos não ficam aqui: só a tela Caixa os mostra, porque é ela que sabe o
@@ -75,7 +76,7 @@ export function Shell() {
   }, [registro])
 
   if (!identidade) return null
-  const vencimento = avisoDoPlano(identidade)
+  const vencimento = avisoDoPlano(identidade, hojeNoBalcao())
 
   // O token guardado é o que abre o aplicativo sem rede, e entrar de novo precisa do servidor: sem ele,
   // Sair não tem volta, e o próximo do turno fica sem vender. Com ele, perguntar só ensinaria a confirmar
@@ -141,10 +142,11 @@ export function Shell() {
           </>}
         </div>
       )}
+      {/* O operador também vê o só leitura, mas pagar é do administrador: o botão é só dele. */}
       {vencimento && (
         <div className="faixa faixa--alerta" role="status">
           <span>{vencimento}</span>
-          <Link className="botao" to="/plano">Renovar</Link>
+          {identidade.perfil === 'ADMIN' && <Link className="botao" to="/plano">Ir ao plano</Link>}
         </div>
       )}
       {/* Só avisa: a venda de hoje continua no caixa aberto, como sempre foi. */}

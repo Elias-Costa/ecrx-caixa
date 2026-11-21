@@ -22,7 +22,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.domain.PixGateway;
 import br.com.caixasimples.pagamentos.domain.ConsultaPix;
 import br.com.caixasimples.pagamentos.application.PixIndisponivelException;
@@ -261,36 +260,28 @@ class VendaPixHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void cobrancaNovaForaDoCompletoERecusadaSemChamarOProvedor() throws Exception {
-        ContaCriada gratuita = criador.criar("Pix no Gratuito", "uma senha longa de teste");
-        UUID vendaId = vendaComUmItem(gratuita);
+    void cobrancaNovaNoSomenteLeituraERecusadaSemChamarOProvedor() throws Exception {
+        // A venda começou antes do só leitura, e continua; a cobrança nova, não.
+        ContaCriada conta = noCompleto("Pix no so leitura");
+        UUID vendaId = vendaComUmItem(conta);
+        criador.deixarSomenteLeitura(conta.contaId());
         String pedido = "{\"tentativaId\":\"" + UUID.randomUUID() + "\",\"valor\":12.50}";
         when(gateway.chaveRecebedora()).thenReturn("chave-teste");
 
         http.perform(post("/api/vendas/{id}/pagamentos/pix", vendaId)
-                .with(autenticador.como(gratuita)).contentType(MediaType.APPLICATION_JSON)
+                .with(autenticador.como(conta)).contentType(MediaType.APPLICATION_JSON)
                 .content(pedido))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail")
-                        .value(containsString("Pix integrado faz parte do plano Completo")));
-
-        ContaCriada suspensa = noCompleto("Pix suspenso");
-        criador.vencerPlano(suspensa.contaId(), 8);
-        UUID vendaSuspensa = vendaComUmItem(suspensa);
-        http.perform(post("/api/vendas/{id}/pagamentos/pix", vendaSuspensa)
-                .with(autenticador.como(suspensa)).contentType(MediaType.APPLICATION_JSON)
-                .content(pedido))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value(containsString("suspensos")));
+                .andExpect(jsonPath("$.detail").value(containsString("só leitura desde")));
 
         verify(gateway, never()).chaveRecebedora();
         verify(gateway, never()).criarCobranca(any(), any());
-        http.perform(get("/api/vendas/{id}", vendaId).with(autenticador.como(gratuita)))
+        http.perform(get("/api/vendas/{id}", vendaId).with(autenticador.como(conta)))
                 .andExpect(jsonPath("$.parcelas").isEmpty());
     }
 
     @Test
-    void cobrancaReservadaAntesDaSuspensaoAindaRetomaEConclui() throws Exception {
+    void cobrancaReservadaAntesDoSomenteLeituraAindaRetomaEConclui() throws Exception {
         ContaCriada conta = noCompleto("Pix antes da suspensao");
         UUID vendaId = vendaComUmItem(conta);
         UUID tentativaId = UUID.randomUUID();
@@ -301,7 +292,7 @@ class VendaPixHttpTest extends TesteDeIntegracao {
                 .with(autenticador.como(conta)).contentType(MediaType.APPLICATION_JSON)
                 .content(pedido)).andExpect(status().isOk());
 
-        criador.vencerPlano(conta.contaId(), 8);
+        criador.deixarSomenteLeitura(conta.contaId());
 
         // A mesma tentativa é a retomada da cobrança que o cliente pode estar pagando.
         http.perform(post("/api/vendas/{id}/pagamentos/pix", vendaId)
@@ -340,10 +331,10 @@ class VendaPixHttpTest extends TesteDeIntegracao {
                 .andExpect(jsonPath("$.parcelas[0].pix").doesNotExist());
     }
 
-    /** O Pix integrado é do plano Completo, então a Conta que cobra por ele o contrata no preparo. */
+    /** Uma Conta já paga, para o cenário não depender do fim do teste. */
     private ContaCriada noCompleto(String nome) {
         ContaCriada conta = criador.criar(nome, "uma senha longa de teste");
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         return conta;
     }
 

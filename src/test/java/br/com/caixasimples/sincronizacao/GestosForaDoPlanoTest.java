@@ -13,12 +13,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 /**
  * Os gestos que o aparelho registra sem rede, fixados um a um.
  *
- * <p>Nenhum deles é recurso pago: produto, cliente, caixa e Venda funcionam em qualquer plano,
- * inclusive suspenso. Por isso o lote aplica todos sem perguntar o plano. Um gesto novo, de
- * estoque ou de outro recurso pago, quebra este teste de propósito: antes de entrar na lista, quem
- * o cria decide o que acontece com ele quando o plano não o inclui ou está suspenso. A regra
- * combinada para esse caso é mandar o gesto para revisão sem aplicar, e o administrador decide o
- * reenvio depois de regularizar.
+ * <p>Com a Conta só leitura, o lote recusa os que começam algo no balcão, abrir caixa, sangria,
+ * suprimento e iniciar venda, pelo instante em que o aparelho os fez; os outros passam, e os da venda
+ * recusada caem junto com ela. Um gesto novo quebra este teste de propósito: antes de entrar na
+ * lista, quem o cria decide se ele começa algo no balcão e, por isso, se pergunta pelo só leitura.
  */
 class GestosForaDoPlanoTest extends TesteDeIntegracao {
 
@@ -26,8 +24,8 @@ class GestosForaDoPlanoTest extends TesteDeIntegracao {
     private List<AplicadorDeOperacoes> aplicadores;
 
     @Test
-    @DisplayName("nenhum gesto offline é recurso pago; gesto novo obriga a decidir o que a suspensão faz com ele")
-    void gestosDeHojeNaoSaoRecursoPago() {
+    @DisplayName("os gestos sem rede são estes; gesto novo obriga a decidir o que o só leitura faz com ele")
+    void gestosDeHoje() {
         Set<String> tipos = aplicadores.stream()
                 .flatMap(aplicador -> aplicador.tipos().stream())
                 .collect(Collectors.toSet());

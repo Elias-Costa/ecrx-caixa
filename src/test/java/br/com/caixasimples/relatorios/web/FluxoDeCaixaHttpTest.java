@@ -18,7 +18,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.domain.SolicitacaoPagamento;
 import br.com.caixasimples.shared.FusoDeReferencia;
@@ -65,9 +64,9 @@ class FluxoDeCaixaHttpTest extends TesteDeIntegracao {
         LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
         Instant inicioDeHoje = FusoDeReferencia.inicioDoDia(hoje);
         ContaCriada contaA = criador.criar("Cafeteria Aurora", SENHA);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         ContaCriada contaB = criador.criar("Loja da Esquina", SENHA);
-        criador.contratar(contaB.contaId(), Plano.COMPLETO);
+        criador.contratar(contaB.contaId());
 
         UUID caixaAberto = contaA.comoUsuario(() -> caixas.abrir(Money.ZERO));
         receberFiadoEmDinheiro(contaA, caixaAberto, "7.00");
@@ -107,15 +106,16 @@ class FluxoDeCaixaHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    void recusaOperadorPlanoSemRelatorioEPeriodoInvalido() throws Exception {
+    void recusaOperadorEValeNoTesteEPeriodoInvalido() throws Exception {
         LocalDate dia = LocalDate.of(2026, 9, 15);
         ContaCriada operador = criador.criar("Loja do Operador", SENHA, Perfil.OPERADOR, true);
-        ContaCriada gratis = criador.criar("Loja Gratuita", SENHA);
+        ContaCriada noTeste = criador.criar("Banca Aurora", SENHA);
         ContaCriada admin = criador.criar("Loja do Fluxo", SENHA);
-        criador.contratar(admin.contaId(), Plano.COMPLETO);
+        criador.contratar(admin.contaId());
 
         fluxo(operador, dia, dia).andExpect(status().isForbidden());
-        fluxo(gratis, dia, dia).andExpect(status().isConflict());
+        // A Conta nova, no teste, já tem os relatórios.
+        fluxo(noTeste, dia, dia).andExpect(status().isOk());
         fluxo(admin, dia, dia.minusDays(1)).andExpect(status().isBadRequest());
         http.perform(get("/api/relatorios/fluxo-de-caixa").param("inicio", dia.toString())
                         .with(autenticador.como(admin)))

@@ -14,8 +14,6 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
 import br.com.caixasimples.contas.application.EmailJaCadastradoException;
-import br.com.caixasimples.contas.application.PlanoSuspensoException;
-import br.com.caixasimples.contas.application.RecursoForaDoPlanoException;
 import br.com.caixasimples.contas.application.UltimoAdministradorException;
 import br.com.caixasimples.contas.application.UsuarioNaoEncontradoException;
 import br.com.caixasimples.contas.application.UsuarioService;
@@ -61,10 +59,10 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     private RegistroDeRemocoesDeTeste registroDeRemocoes;
 
     @Test
-    @DisplayName("o administrador cria um operador no plano completo, e o operador entra")
+    @DisplayName("o administrador cria um operador numa conta paga, e o operador entra")
     void adminCriaOperadorQueEntra() throws Exception {
         ContaCriada conta = criador.criar("Mercado Completo", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "atendente-" + UUID.randomUUID() + "@exemplo.test";
 
         UUID operadorId = conta.comoUsuario(() ->
@@ -89,53 +87,29 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("com o plano suspenso, não se cria usuário, e quem já existe continua entrando")
-    void planoSuspensoNaoCriaUsuario() throws Exception {
-        ContaCriada conta = criador.criar("Mercado Suspenso", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+    @DisplayName("no teste e no só leitura, o administrador cria usuário, e quem já existe continua entrando")
+    void somenteLeituraCriaUsuario() throws Exception {
+        ContaCriada conta = criador.criar("Mercado do Teste", SENHA_DE_TESTE);
         String email = "atendente-" + UUID.randomUUID() + "@exemplo.test";
         conta.comoUsuario(() -> usuarioService.criar("Atendente da manhã", Perfil.OPERADOR, email,
                 SENHA_DO_OPERADOR));
 
-        criador.vencerPlano(conta.contaId(), 7);
-        conta.comoUsuario(() -> usuarioService.criar("Atendente da tolerância", Perfil.OPERADOR,
+        criador.deixarSomenteLeitura(conta.contaId());
+        conta.comoUsuario(() -> usuarioService.criar("Atendente da noite", Perfil.OPERADOR,
                 "x-" + UUID.randomUUID() + "@exemplo.test", SENHA_DO_OPERADOR));
-
-        criador.vencerPlano(conta.contaId(), 8);
-        assertThatExceptionOfType(PlanoSuspensoException.class)
-                .isThrownBy(() -> conta.comoUsuario(() ->
-                        usuarioService.criar("Atendente da noite", Perfil.OPERADOR,
-                                "x-" + UUID.randomUUID() + "@exemplo.test", SENHA_DO_OPERADOR)));
 
         String token = entrar(email, SENHA_DO_OPERADOR);
         http.perform(get("/api/auth/eu").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.situacaoDoPlano").value("SUSPENSO"));
-    }
-
-    @Test
-    @DisplayName("o plano grátis só admite um usuário")
-    void planoSemMultiusuarioRecusa() {
-        ContaCriada gratis = criador.criar("Banca Gratis", SENHA_DE_TESTE);
-
-        assertThatExceptionOfType(RecursoForaDoPlanoException.class)
-                .isThrownBy(() -> gratis.comoUsuario(() ->
-                        usuarioService.criar("Atendente", Perfil.OPERADOR,
-                                "x-" + UUID.randomUUID() + "@exemplo.test", SENHA_DO_OPERADOR)))
-                .withMessageContaining("plano Completo");
-
-        gratis.comoUsuario(() ->
-                assertThat(usuarioService.listar())
-                        .as("nada foi gravado")
-                        .extracting(UsuarioDaConta::id)
-                        .containsExactly(gratis.usuarioId()));
+                .andExpect(jsonPath("$.situacaoDoPlano").value("SOMENTE_LEITURA"));
+        conta.comoUsuario(() -> assertThat(usuarioService.listar()).hasSize(3));
     }
 
     @Test
     @DisplayName("e-mail repetido é recusado, inclusive quando o dono dele é outra conta")
     void emailRepetidoRecusado() {
         ContaCriada conta = criador.criar("Loja Completa", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         ContaCriada outra = criador.criar("Outra Loja", SENHA_DE_TESTE);
 
         assertThatExceptionOfType(EmailJaCadastradoException.class)
@@ -155,7 +129,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("a senha inicial passa pela mesma política de qualquer senha")
     void senhaCurtaRecusada() {
         ContaCriada conta = criador.criar("Padaria Completa", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
 
         assertThatExceptionOfType(SenhaRecusadaException.class)
                 .isThrownBy(() -> conta.comoUsuario(() ->
@@ -170,7 +144,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("o operador não cria, não lista nem inativa usuário (RF30)")
     void operadorNaoGereUsuarios() {
         ContaCriada conta = criador.criar("Oficina Completa", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");
 
         assertThatExceptionOfType(AcessoNegadoException.class)
@@ -193,7 +167,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("o último administrador ativo não se inativa; com um segundo, pode")
     void ultimoAdministradorFica() {
         ContaCriada conta = criador.criar("Salao Completo", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
 
         assertThatExceptionOfType(UltimoAdministradorException.class)
                 .isThrownBy(() -> conta.comoUsuario(() ->
@@ -216,7 +190,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("inativar vale na hora: o token que o operador já tinha deixa de entrar")
     void inativacaoValeNaHora() throws Exception {
         ContaCriada conta = criador.criar("Quitanda Completa", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "atendente-" + UUID.randomUUID() + "@exemplo.test";
         UUID operadorId = conta.comoUsuario(() ->
                 usuarioService.criar("Atendente", Perfil.OPERADOR, email, SENHA_DO_OPERADOR));
@@ -246,7 +220,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     void isolamentoEntreContas() {
         ContaCriada contaA = criador.criar("Negocio A", SENHA_DE_TESTE);
         ContaCriada contaB = criador.criar("Negocio B", SENHA_DE_TESTE);
-        criador.contratar(contaA.contaId(), Plano.COMPLETO);
+        criador.contratar(contaA.contaId());
         UUID operadorDeA = contaA.comoUsuario(() ->
                 usuarioService.criar("Atendente de A", Perfil.OPERADOR,
                         "a-" + UUID.randomUUID() + "@exemplo.test", SENHA_DO_OPERADOR));
@@ -272,7 +246,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("inativar apaga o login, libera o e-mail e permite anonimizar o nome a pedido")
     void inativacaoEAnonimizacao() throws Exception {
         ContaCriada conta = criador.criar("Conta com usuário removido", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "removido-" + UUID.randomUUID() + "@exemplo.test";
         UUID primeiro = conta.comoUsuario(() -> usuarioService.criar(
                 "Nome pessoal", Perfil.OPERADOR, email, SENHA_DO_OPERADOR));
@@ -295,7 +269,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     @DisplayName("com o registro de remoções fora do ar, inativar bloqueia na hora e guarda o login até o pedido repetido com o registro de volta")
     void inativacaoSemORegistro() throws Exception {
         ContaCriada conta = criador.criar("Padaria do Largo", SENHA_DE_TESTE);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         String email = "demitido-" + UUID.randomUUID() + "@exemplo.test";
         UUID operadorId = conta.comoUsuario(() ->
                 usuarioService.criar("Atendente", Perfil.OPERADOR, email, SENHA_DO_OPERADOR));
@@ -351,7 +325,7 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     void anonimizarNomeIsolaContas() {
         ContaCriada dona = criador.criar("Dona do usuário", SENHA_DE_TESTE);
         ContaCriada outra = criador.criar("Outra usuária", SENHA_DE_TESTE);
-        criador.contratar(dona.contaId(), Plano.COMPLETO);
+        criador.contratar(dona.contaId());
         UUID id = dona.comoUsuario(() -> usuarioService.criar("Nome pessoal", Perfil.OPERADOR,
                 "isolado-" + UUID.randomUUID() + "@exemplo.test", SENHA_DO_OPERADOR));
         dona.comoUsuario(() -> usuarioService.inativar(id));
@@ -365,14 +339,13 @@ class UsuarioServiceTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("o administrador corrige o nome do operador, o do inativo e o próprio, sem pedir o plano, e o operador não corrige nenhum")
+    @DisplayName("o administrador corrige o nome do operador, o do inativo e o próprio, e o operador não corrige nenhum")
     void correcaoDoNome() {
         ContaCriada conta = criador.criar("Quitanda Aurora", SENHA_DE_TESTE);
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Joana");
         UsuarioCriado saiu = criador.criarOperadorEm(conta.contaId(), "Carlos");
         conta.comoUsuario(() -> usuarioService.inativar(saiu.usuarioId()));
 
-        // A Conta está no plano grátis, sem multiusuário: corrigir não cria ninguém.
         conta.comoUsuario(() -> {
             usuarioService.corrigirNome(operador.usuarioId(), "Joana Lima");
             usuarioService.corrigirNome(saiu.usuarioId(), "Carlos Souza");

@@ -45,6 +45,12 @@ const comprovante: Comprovante = {
   valorFiado: 0, saldoDevedor: 0,
 }
 
+/** O plano no só leitura desde 19/09/2026, depois do teste vencido em 15/09. */
+const SO_LEITURA: Partial<Identidade> = {
+  plano: 'COMPLETO', situacaoDoPlano: 'SOMENTE_LEITURA', vencimentoDoPlano: '2026-09-15',
+  inicioDaSuspensao: '2026-09-19',
+}
+
 function mostrar(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR', extra: Partial<Identidade> = {}) {
   render(<MemoryRouter><SessaoContext.Provider value={{
     identidade: { usuarioId: 'usuario-1', nome: 'Ana', perfil,
@@ -514,6 +520,43 @@ describe('PDV no tablet', () => {
 
     fireEvent.change(await screen.findByLabelText('Produto por nome ou código'), { target: { value: 'xyz' } })
     expect(await screen.findByText('Nenhum produto encontrado para xyz.')).toBeInTheDocument()
+  })
+
+  it('com a Conta só leitura e sem venda em curso, a busca dá lugar ao aviso, e nada começa', async () => {
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([])
+    const iniciar = vi.spyOn(vendas, 'iniciar')
+    mostrar('OPERADOR', SO_LEITURA)
+
+    expect(await screen.findByText('Com a Conta só leitura, venda nova volta depois do pagamento do plano.'))
+      .toBeInTheDocument()
+    expect(screen.queryByLabelText('Produto por nome ou código')).not.toBeInTheDocument()
+    // A comanda vazia não manda buscar o que a tela não oferece.
+    expect(screen.getByText('Nenhuma venda em andamento.')).toBeInTheDocument()
+    expect(iniciar).not.toHaveBeenCalled()
+  })
+
+  it('com a Conta só leitura, a comanda começada antes continua, com a busca para terminá-la', async () => {
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([{ id: comanda.id,
+      sessaoCaixaId: comanda.sessaoCaixaId, usuarioId: comanda.usuarioId,
+      status: 'ABERTA', total: comanda.total, criadoEm: comanda.criadoEm }])
+    vi.spyOn(vendas, 'consultar').mockResolvedValue(comanda)
+    mostrar('OPERADOR', SO_LEITURA)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Aberta.*retomar ou cancelar/ }))
+
+    expect(await screen.findByText(/1 × Café/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Produto por nome ou código')).toBeInTheDocument()
+  })
+
+  it('com a Conta só leitura e sem caixa, a tela não manda abrir o caixa', async () => {
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(undefined)
+    mostrar('OPERADOR', SO_LEITURA)
+
+    expect(await screen.findByText('Com a Conta só leitura, vender volta depois do pagamento do plano.'))
+      .toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ir ao caixa' })).not.toBeInTheDocument()
   })
 
   it('mostra a recusa do item no painel da busca, onde o produto foi tocado', async () => {

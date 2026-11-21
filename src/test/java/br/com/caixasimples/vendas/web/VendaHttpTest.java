@@ -22,7 +22,6 @@ import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
 import java.time.Instant;
@@ -312,7 +311,7 @@ class VendaHttpTest extends TesteDeIntegracao {
     @Test
     void administradorVeAsVendasDaSessaoDoOperadorEOperadorNaoVeAsDoAdministrador() throws Exception {
         ContaCriada conta = criador.criar("PDV Dona", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         RequestPostProcessor operador = operadorNovo(admin);
         UUID produto = produto(conta);
@@ -359,7 +358,7 @@ class VendaHttpTest extends TesteDeIntegracao {
     @Test
     void operadorVeNaListaDoProprioCaixaAVendaQueOAdministradorFezNele() throws Exception {
         ContaCriada conta = criador.criar("PDV Balcão Dividido", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         RequestPostProcessor operador = operadorNovo(admin);
         UUID produto = produto(conta);
@@ -787,7 +786,7 @@ class VendaHttpTest extends TesteDeIntegracao {
     void inicioComIdDoAparelhoNaoAbreOutraVendaNoReenvioERecusaOutroCaixaOuOperador()
             throws Exception {
         ContaCriada conta = criador.criar("PDV Início", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         RequestPostProcessor operador = operadorNovo(admin);
         UUID produto = produto(conta);
@@ -946,7 +945,7 @@ class VendaHttpTest extends TesteDeIntegracao {
     @Test
     void aTrilhaGuardaQuemCancelouEQuemLancouCadaMovimentoTambemNoCaixaDeOutro() throws Exception {
         ContaCriada conta = criador.criar("PDV Trilha", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         RequestPostProcessor admin = autenticador.como(conta);
         RequestPostProcessor operador = operadorNovo(admin);
         UUID produto = produto(conta);

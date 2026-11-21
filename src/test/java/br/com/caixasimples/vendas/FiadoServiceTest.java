@@ -16,7 +16,6 @@ import br.com.caixasimples.caixa.application.SessaoCaixaService;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.UsuarioCriado;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.pagamentos.domain.SolicitacaoPagamento;
@@ -67,7 +66,7 @@ class FiadoServiceTest extends TesteDeIntegracao {
     @Test
     void operadorRecebeEmSuaSessaoSemVenderFiadoEIsolamentoVale() {
         ContaCriada conta = criador.criar("Fiado A", "senha longa de teste");
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         criador.habilitarEstoque(conta.contaId());
         ContaCriada outra = criador.criar("Fiado B", "senha longa de teste");
         UsuarioCriado operador = criador.criarOperadorEm(conta.contaId(), "Atendente");

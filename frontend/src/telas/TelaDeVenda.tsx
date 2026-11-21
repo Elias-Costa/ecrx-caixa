@@ -16,6 +16,7 @@ import { contagem, dataHora, diaEMes, hora, horaNoDia, lerDinheiro, moeda, quant
 import { caixaPodeTerMudado, criarCaixaLocal } from '../offline/caixaLocal'
 import { normalizarNsu, recusaDaQuantidade } from '../offline/raizDaVenda'
 import { criarVendaLocal } from '../offline/vendaLocal'
+import { somenteLeitura } from '../shell/avisoDoPlano'
 import { useContextoDoShell } from '../shell/ContextoDoShell'
 import { useSincronizacao } from '../shell/sincronizacao'
 import { useCelular } from '../shell/useCelular'
@@ -311,6 +312,10 @@ export function TelaDeVenda() {
   // Sem servidor, ela fica para ler: o botão que só responderia com a recusa ensinaria o operador a
   // não confiar nos botões, e a ação que resta é começar outra venda, que fica no aparelho.
   const comandaSoLeitura = atual?.status === 'ABERTA' && !doDispositivo && !comServidor
+  // Com a Conta só leitura, a comanda começada antes termina, e venda nova não começa: sem ela na
+  // tela, a busca sai, porque o primeiro item começaria uma. A faixa do alto diz o porquê.
+  const semVendaNova = somenteLeitura(identidade, hojeNoBalcao())
+    && !(atual?.status === 'ABERTA' && !comandaSoLeitura)
   // Sem esta frase, a venda feita sem rede e recusada na volta reaparece aberta sem dizer por quê.
   const recusaDaComanda = atual?.status === 'ABERTA' && !doDispositivo
     ? vendasRecusadas.find((venda) => venda.vendaId === atual.id) : undefined
@@ -1001,12 +1006,17 @@ export function TelaDeVenda() {
         </div>}
       </section>}
     {/* Sem caixa, ir ao caixa é a única ação da tela: um botão, não um link solto no texto. */}
-    {carregando ? <p>Carregando...</p> : !sessao ? <>
-      <p>Abra o seu caixa para vender.</p>
-      <p><Link className="botao" to="/caixa">Ir ao caixa</Link></p>
-    </>
+    {carregando ? <p>Carregando...</p> : !sessao ? (semVendaNova
+      ? <p>Com a Conta só leitura, vender volta depois do pagamento do plano.</p>
+      : <>
+        <p>Abra o seu caixa para vender.</p>
+        <p><Link className="botao" to="/caixa">Ir ao caixa</Link></p>
+      </>)
       : <div className="pdv__grade">
-        <section className="pdv__painel pdv__painel--busca">
+        {semVendaNova ? <section className="pdv__painel pdv__painel--busca">
+          <h3 className="pdv__titulo-da-busca">Busca de produtos</h3>
+          <p>Com a Conta só leitura, venda nova volta depois do pagamento do plano.</p>
+        </section> : <section className="pdv__painel pdv__painel--busca">
           {/* No celular o título sai da vista, e a busca sobe para perto do alto da tela, longe do
               teclado virtual; o leitor de tela continua achando o painel por ele. */}
           <h3 className="pdv__titulo-da-busca">Busca de produtos</h3>
@@ -1044,7 +1054,7 @@ export function TelaDeVenda() {
               </button>
             </li>)}
           </ul>}
-        </section>
+        </section>}
 
         {/* O comprovante vem logo abaixo da comanda que o gerou: depois da lista do caixa, ficava a
             milhares de pixels, com o cliente esperando. */}
@@ -1062,7 +1072,8 @@ export function TelaDeVenda() {
             <button className="botao botao--secundario" type="button" disabled={comandaOcupada}
               onClick={() => void retomar(abertasNoCaixa[0])}>Retomar</button>
           </div>}
-          {!atual ? <p>Busque e escolha o primeiro produto para iniciar.</p> : <>
+          {!atual ? <p>{semVendaNova ? 'Nenhuma venda em andamento.'
+            : 'Busque e escolha o primeiro produto para iniciar.'}</p> : <>
             {/* O cancelamento fica no alto, junto da venda que ele desfaz, e longe dos botões de
                 pagar e concluir: depois de concluir a comanda encolhe, e o toque seguinte cairia nele. */}
             <div className="pdv__topo pdv__venda">

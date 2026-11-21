@@ -1,7 +1,5 @@
 package br.com.caixasimples.relatorios.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
-import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.pagamentos.FormaPagamento;
 import br.com.caixasimples.pagamentos.StatusPagamento;
 import br.com.caixasimples.relatorios.internal.LancamentoEmPix;
@@ -38,18 +36,16 @@ import org.springframework.transaction.annotation.Transactional;
  * banco pode já ter o crédito que o aviso do provedor não trouxe, e a linha marcada leva à
  * conciliação. A recusada, expirada ou removida, fica fora, porque nela nunca entrou dinheiro.
  *
- * <p>Só lê, e a conta vem sempre do contexto (RNF05). É relatório do administrador (RF30) e pede o
- * plano com relatórios, como os outros.
+ * <p>Só lê, e a conta vem sempre do contexto (RNF05). É relatório do administrador (RF30), como os
+ * outros.
  */
 @Service
 public class ConferenciaDoPixService {
 
     private final VendaParaRelatorioRepository vendas;
-    private final ContaService contas;
 
-    ConferenciaDoPixService(VendaParaRelatorioRepository vendas, ContaService contas) {
+    ConferenciaDoPixService(VendaParaRelatorioRepository vendas) {
         this.vendas = vendas;
-        this.contas = contas;
     }
 
     /**
@@ -80,7 +76,6 @@ public class ConferenciaDoPixService {
     /** A lista em si; {@code operadorId} nulo é a conta inteira, e só as duas públicas chamam. */
     private ConferenciaDoPix consultar(LocalDate dia, UUID operadorId) {
         UsuarioContext.exigirAdmin();
-        contas.exigirRecurso(RecursoDoPlano.RELATORIOS);
         Periodo umDia = new Periodo(dia, dia);
 
         List<Lancamento> lancamentos = new ArrayList<>();

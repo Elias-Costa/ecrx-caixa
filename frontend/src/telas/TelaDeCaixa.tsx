@@ -10,6 +10,7 @@ import { abertaAntesDeHoje, diaNoBalcao, hojeNoBalcao } from '../dataDoBalcao'
 import { dataHora, diaEMes, hora, horaNoDia, lerDinheiro, moeda } from '../formatos'
 import { caixaPodeTerMudado, criarCaixaLocal } from '../offline/caixaLocal'
 import { criarVendaLocal } from '../offline/vendaLocal'
+import { somenteLeitura } from '../shell/avisoDoPlano'
 import { useContextoDoShell } from '../shell/ContextoDoShell'
 import { useSincronizacao } from '../shell/sincronizacao'
 import { useConexao } from '../shell/useConexao'
@@ -315,6 +316,9 @@ export function TelaDeCaixa() {
   const comServidor = conexao === 'com-servidor'
   const ids = useId()
   const administrador = identidade?.perfil === 'ADMIN'
+  // Com a Conta só leitura, abrir, sangria e suprimento seriam recusados; fechar continua, porque o
+  // dinheiro da gaveta precisa ser conferido.
+  const contaSoLeitura = somenteLeitura(identidade, hojeNoBalcao())
   const [aberta, setAberta] = useState<SessaoCaixa | undefined>()
   const [fechadoNoutroAparelho, setFechadoNoutroAparelho] = useState<SessaoCaixa | undefined>()
   const [selecionada, setSelecionada] = useState<SessaoCaixa | undefined>()
@@ -676,11 +680,13 @@ export function TelaDeCaixa() {
             <button className="botao botao--secundario" type="button"
               onClick={() => void verFechamento(fechadoNoutroAparelho)}>Ver o fechamento</button>
           </div>}
-          <CampoDeDinheiro rotulo="Valor inicial" required placeholder="0,00" valor={valorAbertura}
-            aoMudar={setValorAbertura} />
-          <button className="botao" disabled={ocupado !== null}>
-            {ocupado === 'abrir' ? 'Abrindo...' : 'Abrir caixa'}
-          </button>
+          {contaSoLeitura ? <p>Com a Conta só leitura, abrir caixa volta depois do pagamento do plano.</p> : <>
+            <CampoDeDinheiro rotulo="Valor inicial" required placeholder="0,00" valor={valorAbertura}
+              aoMudar={setValorAbertura} />
+            <button className="botao" disabled={ocupado !== null}>
+              {ocupado === 'abrir' ? 'Abrindo...' : 'Abrir caixa'}
+            </button>
+          </>}
         </form>}
         {mostrarEm('abertura')}
       </section>
@@ -772,7 +778,9 @@ export function TelaDeCaixa() {
 
         {/* As ações vêm antes do extrato: cada venda acrescenta uma linha a ele, e o fechamento, no
             fim do dia, ficaria depois de todas. */}
-        {selecionada.status === 'ABERTA' && <form className="caixa__formulario"
+        {selecionada.status === 'ABERTA' && contaSoLeitura && <p>Com a Conta só leitura, sangria e
+          suprimento voltam depois do pagamento do plano.</p>}
+        {selecionada.status === 'ABERTA' && !contaSoLeitura && <form className="caixa__formulario"
           onSubmit={(evento) => void lancar(evento)}>
           <h4>Lançar movimento</h4>
           <label>Tipo

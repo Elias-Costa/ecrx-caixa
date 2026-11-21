@@ -14,7 +14,6 @@ import br.com.caixasimples.cadastro.application.ProdutoService.DadosDoProduto;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.shared.Money;
 import br.com.caixasimples.shared.Perfil;
 import java.math.BigDecimal;
@@ -43,7 +42,7 @@ class EstoqueHttpTest extends TesteDeIntegracao {
     @Test
     void adminAjustaDefineMinimoEConsultaAlerta() throws Exception {
         ContaCriada conta = criador.criar("Mercado do Estoque", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         criador.habilitarEstoque(conta.contaId());
         UUID produto = cadastrar(conta, TipoProduto.PRODUTO, "Arroz");
         cadastrar(conta, TipoProduto.SERVICO, "Entrega");
@@ -75,7 +74,7 @@ class EstoqueHttpTest extends TesteDeIntegracao {
     @Test
     void contaDesligadaRecebe409NasQuatroRotas() throws Exception {
         ContaCriada conta = criador.criar("Salao sem Estoque", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         UUID produto = cadastrar(conta, TipoProduto.PRODUTO, "Shampoo");
 
         http.perform(get("/api/estoque/produtos").with(autenticador.como(conta)))
@@ -115,9 +114,9 @@ class EstoqueHttpTest extends TesteDeIntegracao {
     @Test
     void outraContaNaoLeNemAlteraProduto() throws Exception {
         ContaCriada primeira = criador.criar("Mercado Primeiro", SENHA);
-        criador.contratar(primeira.contaId(), Plano.COMPLETO);
+        criador.contratar(primeira.contaId());
         ContaCriada segunda = criador.criar("Mercado Segundo", SENHA);
-        criador.contratar(segunda.contaId(), Plano.COMPLETO);
+        criador.contratar(segunda.contaId());
         criador.habilitarEstoque(primeira.contaId());
         criador.habilitarEstoque(segunda.contaId());
         UUID produto = cadastrar(primeira, TipoProduto.PRODUTO, "Arroz");
@@ -224,7 +223,7 @@ class EstoqueHttpTest extends TesteDeIntegracao {
 
     private ContaCriada contaComEstoque(String nome) {
         ContaCriada conta = criador.criar(nome, SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         criador.habilitarEstoque(conta.contaId());
         return conta;
     }
@@ -251,7 +250,7 @@ class EstoqueHttpTest extends TesteDeIntegracao {
     @ExtendWith(OutputCaptureExtension.class)
     void motivoDoAjusteAcimaDaColunaRecebe400(CapturedOutput log) throws Exception {
         ContaCriada conta = criador.criar("Mercado do Motivo", SENHA);
-        criador.contratar(conta.contaId(), Plano.COMPLETO);
+        criador.contratar(conta.contaId());
         criador.habilitarEstoque(conta.contaId());
         UUID produto = cadastrar(conta, TipoProduto.PRODUTO, "Feijao");
 

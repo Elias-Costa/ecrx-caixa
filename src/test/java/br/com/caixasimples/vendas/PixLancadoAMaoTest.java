@@ -46,7 +46,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * O Pix que o operador lança à mão, depois de ver o dinheiro no extrato: confirmado na hora, sem
- * cobrança e sem o provedor, no plano gratuito, com rede e pelo lote do aparelho sem rede.
+ * cobrança e sem o provedor, na Conta em teste, com rede e pelo lote do aparelho sem rede.
  *
  * <p>O provedor é um dublê sem resposta nenhuma: qualquer chamada a ele aparece na verificação, e
  * nenhum destes caminhos pode chegar lá.

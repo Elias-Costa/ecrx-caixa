@@ -11,7 +11,6 @@ import br.com.caixasimples.TesteDeIntegracao;
 import br.com.caixasimples.contas.AutenticadorDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste;
 import br.com.caixasimples.contas.CriadorDeContaDeTeste.ContaCriada;
-import br.com.caixasimples.contas.Plano;
 import br.com.caixasimples.pagamentos.domain.PixGateway;
 import br.com.caixasimples.shared.Perfil;
 import java.util.LinkedHashMap;
@@ -157,17 +156,16 @@ class ChavePixHttpTest extends TesteDeIntegracao {
     }
 
     @Test
-    @DisplayName("a identidade só marca o Pix integrado no Completo em dia, com o provedor configurado")
+    @DisplayName("a identidade marca o Pix integrado no teste e no período pago, com o provedor configurado, e não no só leitura")
     void marcaDoPixIntegrado() throws Exception {
         when(gateway.configurada()).thenReturn(true);
-        ContaCriada gratuita = criador.criar("Lanchonete Aurora", SENHA);
+        ContaCriada noTeste = criador.criar("Lanchonete Aurora", SENHA);
         ContaCriada completa = criador.criar("Quitanda Aurora", SENHA);
-        criador.contratar(completa.contaId(), Plano.COMPLETO);
+        criador.contratar(completa.contaId());
         ContaCriada suspensa = criador.criar("Armazém Aurora", SENHA);
-        criador.contratar(suspensa.contaId(), Plano.COMPLETO);
-        criador.vencerPlano(suspensa.contaId(), 8);
+        criador.deixarSomenteLeitura(suspensa.contaId());
 
-        pixIntegrado(gratuita).andExpect(jsonPath("$.pixIntegrado").value(false));
+        pixIntegrado(noTeste).andExpect(jsonPath("$.pixIntegrado").value(true));
         pixIntegrado(completa).andExpect(jsonPath("$.pixIntegrado").value(true))
                 .andExpect(jsonPath("$.recursos").value(org.hamcrest.Matchers.hasItem(
                         "PIX_INTEGRADO")));

@@ -12,6 +12,7 @@ import br.com.caixasimples.shared.Perfil;
 import br.com.caixasimples.shared.TenantContext;
 import br.com.caixasimples.shared.UsuarioAutenticado;
 import br.com.caixasimples.shared.UsuarioContext;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -60,7 +61,7 @@ public class CriadorDeContaDeTeste {
 
     private ContaCriada criar(String nomeNegocio, String tipoNegocio, String senha, Perfil perfil,
             boolean ativo) {
-        ContaId contaId = contas.save(new Conta(nomeNegocio, tipoNegocio, Plano.GRATIS)).contaId();
+        ContaId contaId = contas.save(new Conta(nomeNegocio, tipoNegocio, Instant.now())).contaId();
         String email = "teste-" + UUID.randomUUID() + "@exemplo.test";
 
         UUID usuarioId = TenantContext.executarComo(contaId, () -> {
@@ -114,30 +115,40 @@ public class CriadorDeContaDeTeste {
     }
 
     /**
-     * Contrata um plano pago para a conta, como se o código de adesão tivesse sido aplicado hoje
-     * (RF31). Conta nasce no plano grátis, sem relatórios, estoque nem segundo usuário; o teste que
-     * usa um desses recursos contrata o plano no preparo, sem passar pelo pedido.
+     * Paga o primeiro mês da conta, como se o código da renovação pedida no teste tivesse sido
+     * aplicado hoje (RF31): a conta sai do teste e vence um mês depois do fim dele. Conta nasce no
+     * teste, com tudo o que o plano inclui; quem chama é o teste que quer a conta já paga.
      */
-    public void contratar(ContaId contaId, Plano plano) {
+    public void contratar(ContaId contaId) {
         Conta conta = contas.findById(contaId.valor()).orElseThrow();
-        conta.ativarPlano(plano, LocalDate.now(FusoDeReferencia.DO_BALCAO));
+        conta.renovar(conta.periodoDaRenovacao(LocalDate.now(FusoDeReferencia.DO_BALCAO)).fim());
         contas.save(conta);
     }
 
     /**
-     * Põe o vencimento do plano pago a tantos dias de hoje: zero é o dia do vencimento, sete o
-     * último da tolerância, oito o primeiro da suspensão, e um número negativo o deixa no futuro.
-     * Por SQL, porque a aplicação nunca recua um vencimento.
+     * Põe o vencimento a tantos dias de hoje, no teste ou no período pago, como a conta estiver:
+     * zero é o dia do vencimento, de zero a três é sempre a tolerância, e de seis em diante é sempre
+     * o só leitura, porque a tolerância é de três dias úteis e o fim de semana a estica até seis
+     * dias. Quatro e cinco dependem do dia da semana de hoje, e nenhum teste deve usá-los. Um
+     * número negativo deixa o vencimento no futuro. Por SQL, porque a aplicação nunca recua um
+     * vencimento.
      */
     public void vencerPlano(ContaId contaId, int diasDepoisDoVencimento) {
+        if (diasDepoisDoVencimento == 4 || diasDepoisDoVencimento == 5) {
+            throw new IllegalArgumentException("4 e 5 dias dependem do dia da semana de hoje");
+        }
         LocalDate vencimento = LocalDate.now(FusoDeReferencia.DO_BALCAO)
                 .minusDays(diasDepoisDoVencimento);
         int alteradas = jdbc.update("UPDATE conta SET proximo_vencimento = ?, dia_de_vencimento = ?"
-                + " WHERE id = ? AND plano <> 'GRATIS'",
-                vencimento, vencimento.getDayOfMonth(), contaId.valor());
+                + " WHERE id = ?", vencimento, vencimento.getDayOfMonth(), contaId.valor());
         if (alteradas != 1) {
-            throw new IllegalStateException("so a conta com plano pago tem vencimento: " + contaId);
+            throw new IllegalStateException("conta nao encontrada: " + contaId);
         }
+    }
+
+    /** Deixa a conta só leitura desde ontem ou antes: o vencimento fica sete dias atrás. */
+    public void deixarSomenteLeitura(ContaId contaId) {
+        vencerPlano(contaId, 7);
     }
 
     /**

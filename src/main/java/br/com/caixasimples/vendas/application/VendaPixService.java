@@ -1,6 +1,5 @@
 package br.com.caixasimples.vendas.application;
 
-import br.com.caixasimples.contas.RecursoDoPlano;
 import br.com.caixasimples.contas.application.ContaService;
 import br.com.caixasimples.pagamentos.application.PixCobrancaService;
 import br.com.caixasimples.pagamentos.application.PixIndisponivelException;
@@ -19,9 +18,9 @@ import org.springframework.stereotype.Service;
  * A cobrança Pix integrada ao provedor. Persiste a reserva antes da chamada externa para que falha
  * de rede preserve a tentativa.
  *
- * <p>Cobrar por uma tentativa nova pede o recurso do plano. Retomar uma tentativa já reservada, e
- * receber o aviso do provedor, não: a Conta que perdeu o recurso no meio de uma cobrança ainda
- * recebe o Pix que o cliente pode estar pagando, e o cancelamento ainda remove a cobrança.
+ * <p>Cobrar por uma tentativa nova é recusado na Conta só leitura. Retomar uma tentativa já
+ * reservada, e receber o aviso do provedor, não: a Conta que ficou só leitura no meio de uma cobrança
+ * ainda recebe o Pix que o cliente pode estar pagando, e o cancelamento ainda remove a cobrança.
  */
 @Service
 public class VendaPixService {
@@ -36,15 +35,13 @@ public class VendaPixService {
     }
 
     /**
-     * @throws br.com.caixasimples.contas.application.RecursoForaDoPlanoException se a tentativa é
-     *         nova e o plano não inclui o Pix integrado
-     * @throws br.com.caixasimples.contas.application.PlanoSuspensoException se a tentativa é nova e
-     *         os recursos pagos estão suspensos
+     * @throws br.com.caixasimples.contas.application.ContaSomenteLeituraException se a tentativa é
+     *         nova e a Conta está só leitura
      */
     public Pagamento cobrar(UUID vendaId, UUID tentativaId, Money valor) {
         boolean retomada = vendas.verificarAcessoATentativaPix(vendaId, tentativaId);
         if (!retomada) {
-            contas.exigirRecurso(RecursoDoPlano.PIX_INTEGRADO);
+            contas.exigirOperacao(Instant.now());
         }
         // A chave e as credenciais precisam estar configuradas antes de reservar a parcela.
         Pagamento parcela = vendas.reservarPix(vendaId, tentativaId, valor, pix.chaveRecebedora());

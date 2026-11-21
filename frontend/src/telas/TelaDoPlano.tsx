@@ -18,33 +18,33 @@ const NOME_DO_PLANO: Record<Plano, string> = {
   COMPLETO: 'Completo',
 }
 
-const O_QUE_INCLUI: Record<Plano, string> = {
-  GRATIS: 'Cadastro, vendas e caixa, com um usuário e o Pix manual com QR.',
-  COMPLETO: 'Tudo do Gratuito, mais os relatórios de faturamento, mais vendidos e fluxo de caixa,'
-    + ' o resumo de cada caixa fechado por e-mail, o controle de estoque, mais de um usuário e o Pix integrado, confirmado sem conferir o extrato.',
-}
+const O_QUE_INCLUI = 'Cadastro, vendas e caixa, os relatórios de faturamento, mais vendidos e fluxo de'
+  + ' caixa, o resumo de cada caixa fechado por e-mail, o controle de estoque, mais de um usuário e o Pix'
+  + ' integrado, confirmado sem conferir o extrato.'
 
 const NOME_DO_TIPO: Record<TipoDePedido, string> = {
   ADESAO: 'Adesão',
   RENOVACAO: 'Renovação',
 }
 
+// Sem mensalidade e suspenso não chegam do servidor; ficam porque o tipo da identidade guardada os tem.
 const NOME_DA_SITUACAO: Record<SituacaoDoPlano, string> = {
   SEM_MENSALIDADE: 'Sem mensalidade',
   EM_DIA: 'Em dia',
   A_VENCER: 'Vence nos próximos dias',
   VENCIDO: 'Vencido, na tolerância',
+  SOMENTE_LEITURA: 'Só leitura, sem o pagamento',
   SUSPENSO: 'Suspenso',
 }
 
 /**
- * A troca de plano pela própria Conta (RF31). O administrador pede o plano, manda o texto do
- * pedido pelo canal de atendimento e faz o Pix; depois de conferir o Pix, o mantenedor entrega um
- * código, que o administrador aplica aqui. O pedido sozinho não muda nada: o plano só vale com o
- * código.
+ * O pagamento do plano pela própria Conta (RF31). O administrador pede, manda o texto do pedido
+ * pelo canal de atendimento e faz o Pix; depois de conferir o Pix, o mantenedor entrega um código,
+ * que o administrador aplica aqui. O pedido sozinho não muda nada: o pagamento só vale com o código.
  *
  * Tudo aqui pede conexão, porque o pedido e o código são conferidos no servidor. Aplicado o
- * código, a tela pergunta de novo quem está operando, para o menu mostrar os recursos novos.
+ * código, a tela pergunta de novo quem está operando, para o aviso do plano e a venda voltarem
+ * em todas as telas.
  */
 export function TelaDoPlano() {
   const { atualizarIdentidade } = useSessao()
@@ -148,28 +148,24 @@ export function TelaDoPlano() {
 
     {estado && <>
       <section className="relatorios__cartao">
-        <h3>Plano atual: {NOME_DO_PLANO[estado.plano]}</h3>
+        <h3>Plano {NOME_DO_PLANO[estado.plano]}{estado.emTeste ? ', em teste' : ''}</h3>
         <p>{NOME_DA_SITUACAO[estado.situacao]}</p>
-        {estado.vencimento && <p>Vencimento: {mostrarData(estado.vencimento)}</p>}
+        {estado.vencimento && (estado.emTeste
+          ? <p>O teste {testeAcabou(estado.situacao) ? 'foi' : 'vai'} até {mostrarData(diaAnterior(estado.vencimento))}.</p>
+          : <p>Vencimento: {mostrarData(estado.vencimento)}</p>)}
         {estado.situacao === 'VENCIDO' && estado.inicioDaSuspensao &&
-          <p>Sem a renovação, os recursos pagos param em {mostrarData(estado.inicioDaSuspensao)}.</p>}
-        {estado.situacao === 'SUSPENSO' && estado.inicioDaSuspensao &&
-          <p>Os recursos pagos estão suspensos desde {mostrarData(estado.inicioDaSuspensao)}. Venda,
-            caixa e cadastro continuam.</p>}
+          <p>Sem o pagamento, a Conta fica só leitura em {mostrarData(estado.inicioDaSuspensao)}.</p>}
+        {estado.situacao === 'SOMENTE_LEITURA' && estado.inicioDaSuspensao &&
+          <p>A Conta está só leitura desde {mostrarData(estado.inicioDaSuspensao)}: não começa venda nem
+            abre caixa. Fechar o caixa aberto, os relatórios e o cadastro continuam. O pagamento
+            devolve tudo, e o mês pago começa no dia em que o código for aplicado.</p>}
       </section>
 
-      <h3>O que cada plano inclui</h3>
-      <ul className="cadastro__lista">
-        <li className="cadastro__item"><div>
-          <strong>{NOME_DO_PLANO.GRATIS}</strong>
-          <p>{O_QUE_INCLUI.GRATIS} Sem mensalidade.</p>
-        </div></li>
-        <li className="cadastro__item"><div>
-          <strong>{NOME_DO_PLANO.COMPLETO}</strong>
-          <p>{O_QUE_INCLUI.COMPLETO} {moeda.format(estado.mensalidadeCompleto)} por mês.</p>
-          <p>A emissão de NFC-e ainda não está disponível.</p>
-        </div></li>
-      </ul>
+      <h3>O que o plano inclui</h3>
+      <p>{O_QUE_INCLUI} {moeda.format(estado.mensalidadeCompleto)} por mês.</p>
+      <p>Depois do vencimento, a Conta tem três dias úteis para pagar; depois deles, fica só leitura
+        até o pagamento.</p>
+      <p>A emissão de NFC-e ainda não está disponível.</p>
 
       <h3>Pedir</h3>
       <p className="cadastro__apoio">O pedido não muda o plano. Mande o texto do pedido pelo canal
@@ -179,7 +175,7 @@ export function TelaDoPlano() {
         {estado.propostas.map((proposta) =>
           <button className="botao" type="button" key={`${proposta.tipo}-${proposta.plano}`}
             disabled={enviando || !online} onClick={() => void pedir(proposta)}>
-            {rotuloDaProposta(proposta)}
+            {rotuloDaProposta(proposta, estado.emTeste)}
           </button>)}
       </div>
 
@@ -245,13 +241,22 @@ function textoDoPedido(pedido: PedidoDePlano): string {
   ].join('\n')
 }
 
-function rotuloDaProposta(proposta: PropostaDePlano): string {
+/**
+ * A adesão é o pagamento de quem está só leitura, e o mês começa no dia do código. No teste, o
+ * primeiro mês pago é uma renovação para o servidor, mas para quem paga é o primeiro pagamento.
+ */
+function rotuloDaProposta(proposta: PropostaDePlano, emTeste: boolean): string {
   const valor = moeda.format(proposta.valor)
   const nome = NOME_DO_PLANO[proposta.plano]
-  if (proposta.tipo === 'ADESAO') return `Pedir o ${nome} (${valor} por mês)`
+  if (proposta.tipo === 'ADESAO') return `Pagar o ${nome} a partir do dia do código (${valor})`
   const ate = proposta.periodoFim ? mostrarData(diaAnterior(proposta.periodoFim)) : ''
   const de = proposta.periodoInicio ? mostrarData(proposta.periodoInicio) : ''
-  return `Renovar o ${nome} de ${de} a ${ate} (${valor})`
+  return `${emTeste ? 'Pagar' : 'Renovar'} o ${nome} de ${de} a ${ate} (${valor})`
+}
+
+/** Vencido ou só leitura, o teste já terminou, e a frase vai ao passado. */
+function testeAcabou(situacao: SituacaoDoPlano): boolean {
+  return situacao === 'VENCIDO' || situacao === 'SOMENTE_LEITURA'
 }
 
 function mensagemDe(falha: unknown): string {

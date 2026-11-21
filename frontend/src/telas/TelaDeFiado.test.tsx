@@ -258,3 +258,27 @@ it('a leitura recusada pelo servidor mostra a recusa, sem as frases de vazio', a
   expect(screen.queryByText('Nenhuma venda com saldo devedor.')).not.toBeInTheDocument()
   expect(screen.queryByText('Abra o seu caixa para registrar recebimentos.')).not.toBeInTheDocument()
 })
+
+it('com a Conta só leitura, a lista de quem deve continua e o Receber sai', async () => {
+  vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue({
+    id: 'sessao-1', usuarioId: 'operador-1', valorAbertura: 0,
+    valorFechamentoEsperado: 0, valorFechamentoContado: null, diferenca: null,
+    abertaEm: '2026-09-23T12:00:00Z', fechadaEm: null, status: 'ABERTA',
+  })
+  vi.spyOn(fiado, 'dividas').mockResolvedValue([{ vendaId: 'venda-1', clienteId: 'cliente-1',
+    nomeCliente: 'Lia', concluidoEm: '2026-09-23T12:00:00Z', saldoDevedor: 20 }])
+  const receber = vi.spyOn(vendas, 'receber')
+  render(<MemoryRouter><SessaoContext.Provider value={{
+    identidade: { usuarioId: 'operador-1', nome: 'Ana', perfil: 'OPERADOR',
+      contaId: 'conta-1', nomeNegocio: 'Loja', estoqueHabilitado: false, plano: 'COMPLETO',
+      situacaoDoPlano: 'SOMENTE_LEITURA', vencimentoDoPlano: '2026-09-15',
+      inicioDaSuspensao: '2026-09-19' },
+    entrar: vi.fn(), sair: vi.fn(), atualizarIdentidade: vi.fn(), relerIdentidade: vi.fn(),
+  }}><TelaDeFiado /></SessaoContext.Provider></MemoryRouter>)
+
+  expect(await screen.findByText('Lia')).toBeInTheDocument()
+  expect(screen.getByText('Com a Conta só leitura, receber fiado volta depois do pagamento do plano.'))
+    .toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Receber' })).not.toBeInTheDocument()
+  expect(receber).not.toHaveBeenCalled()
+})

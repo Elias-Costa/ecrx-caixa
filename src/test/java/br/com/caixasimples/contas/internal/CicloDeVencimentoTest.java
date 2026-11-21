@@ -11,7 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * As datas do ciclo do plano pago, com datas fixas: a classe não lê relógio, e quem chama informa o
+ * As datas do teste e do ciclo do plano, com datas fixas: a classe não lê relógio, e quem chama informa o
  * dia de hoje.
  */
 class CicloDeVencimentoTest {
@@ -35,12 +35,12 @@ class CicloDeVencimentoTest {
     }
 
     @Test
-    @DisplayName("adesão em 31 de janeiro vence em 28 de fevereiro e volta ao dia 31 em março")
+    @DisplayName("o ciclo do dia 31 vence em 28 de fevereiro e volta ao dia 31 em março")
     void voltaAoDiaOriginal() {
-        LocalDate adesao = LocalDate.of(2026, 1, 31);
-        int dia = adesao.getDayOfMonth();
+        LocalDate janeiro = LocalDate.of(2026, 1, 31);
+        int dia = janeiro.getDayOfMonth();
 
-        LocalDate fevereiro = CicloDeVencimento.seguinte(adesao, dia);
+        LocalDate fevereiro = CicloDeVencimento.seguinte(janeiro, dia);
         LocalDate marco = CicloDeVencimento.seguinte(fevereiro, dia);
         LocalDate abril = CicloDeVencimento.seguinte(marco, dia);
         LocalDate maio = CicloDeVencimento.seguinte(abril, dia);
@@ -52,7 +52,7 @@ class CicloDeVencimentoTest {
     }
 
     @Test
-    @DisplayName("adesão em 29 de fevereiro vence no dia 28 do fevereiro seguinte e volta ao 29")
+    @DisplayName("o ciclo do dia 29 vence no dia 28 do fevereiro seguinte e volta ao 29")
     void adesaoNoDiaBissexto() {
         int dia = 29;
 
@@ -65,59 +65,91 @@ class CicloDeVencimentoTest {
     }
 
     @Test
-    @DisplayName("aviso a partir de sete dias antes, tolerância de sete dias depois, suspensão no oitavo")
-    void limitesDeCadaSituacao() {
-        LocalDate vencimento = LocalDate.of(2026, 3, 10);
+    @DisplayName("o teste vai até o décimo quarto dia e vence no décimo quinto, também na virada do mês")
+    void fimDoTeste() {
+        assertThat(CicloDeVencimento.fimDoTeste(LocalDate.of(2026, 12, 1)))
+                .isEqualTo(LocalDate.of(2026, 12, 15));
+        assertThat(CicloDeVencimento.fimDoTeste(LocalDate.of(2026, 12, 20)))
+                .isEqualTo(LocalDate.of(2027, 1, 3));
+    }
 
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 2)))
+    @Test
+    @DisplayName("vencimento numa sexta: a tolerância vai até a quarta, e o só leitura começa na quinta")
+    void vencimentoNumaSexta() {
+        LocalDate sexta = LocalDate.of(2026, 11, 20);
+
+        assertThat(CicloDeVencimento.inicioDoSomenteLeitura(sexta))
+                .isEqualTo(LocalDate.of(2026, 11, 26));
+        assertThat(CicloDeVencimento.situacao(sexta, false, LocalDate.of(2026, 11, 25)))
+                .isEqualTo(SituacaoDoPlano.VENCIDO);
+        assertThat(CicloDeVencimento.situacao(sexta, false, LocalDate.of(2026, 11, 26)))
+                .isEqualTo(SituacaoDoPlano.SOMENTE_LEITURA);
+    }
+
+    @Test
+    @DisplayName("o feriado conta como dia útil: vencimento na véspera de Natal, só leitura no dia 30")
+    void feriadoContaComoDiaUtil() {
+        LocalDate quinta = LocalDate.of(2026, 12, 24);
+
+        assertThat(CicloDeVencimento.inicioDoSomenteLeitura(quinta))
+                .isEqualTo(LocalDate.of(2026, 12, 30));
+        assertThat(CicloDeVencimento.situacao(quinta, true, LocalDate.of(2026, 12, 29)))
+                .isEqualTo(SituacaoDoPlano.VENCIDO);
+        assertThat(CicloDeVencimento.situacao(quinta, true, LocalDate.of(2026, 12, 30)))
+                .isEqualTo(SituacaoDoPlano.SOMENTE_LEITURA);
+    }
+
+    @Test
+    @DisplayName("vencimento no fim de semana conta a tolerância a partir da segunda")
+    void vencimentoNoFimDeSemana() {
+        assertThat(CicloDeVencimento.inicioDoSomenteLeitura(LocalDate.of(2026, 11, 21)))
+                .as("sábado")
+                .isEqualTo(LocalDate.of(2026, 11, 26));
+        assertThat(CicloDeVencimento.inicioDoSomenteLeitura(LocalDate.of(2026, 11, 22)))
+                .as("domingo")
+                .isEqualTo(LocalDate.of(2026, 11, 26));
+        assertThat(CicloDeVencimento.inicioDoSomenteLeitura(LocalDate.of(2026, 11, 23)))
+                .as("segunda")
+                .isEqualTo(LocalDate.of(2026, 11, 27));
+    }
+
+    @Test
+    @DisplayName("num período pago, o aviso começa sete dias antes; no teste, três")
+    void avisoDoPagoEDoTeste() {
+        LocalDate terca = LocalDate.of(2026, 3, 10);
+
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 2)))
                 .isEqualTo(SituacaoDoPlano.EM_DIA);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 3)))
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 3)))
                 .isEqualTo(SituacaoDoPlano.A_VENCER);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 9)))
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 9)))
                 .isEqualTo(SituacaoDoPlano.A_VENCER);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 10)))
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 10)))
                 .isEqualTo(SituacaoDoPlano.VENCIDO);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 17)))
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 13)))
                 .isEqualTo(SituacaoDoPlano.VENCIDO);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 3, 18)))
-                .isEqualTo(SituacaoDoPlano.SUSPENSO);
-        assertThat(CicloDeVencimento.situacao(vencimento, LocalDate.of(2026, 9, 1)))
-                .isEqualTo(SituacaoDoPlano.SUSPENSO);
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 3, 14)))
+                .isEqualTo(SituacaoDoPlano.SOMENTE_LEITURA);
+        assertThat(CicloDeVencimento.situacao(terca, false, LocalDate.of(2026, 9, 1)))
+                .isEqualTo(SituacaoDoPlano.SOMENTE_LEITURA);
 
-        assertThat(CicloDeVencimento.inicioDaSuspensao(vencimento))
-                .isEqualTo(LocalDate.of(2026, 3, 18));
+        assertThat(CicloDeVencimento.situacao(terca, true, LocalDate.of(2026, 3, 6)))
+                .isEqualTo(SituacaoDoPlano.EM_DIA);
+        assertThat(CicloDeVencimento.situacao(terca, true, LocalDate.of(2026, 3, 7)))
+                .isEqualTo(SituacaoDoPlano.A_VENCER);
+        assertThat(CicloDeVencimento.situacao(terca, true, LocalDate.of(2026, 3, 9)))
+                .isEqualTo(SituacaoDoPlano.A_VENCER);
+        assertThat(CicloDeVencimento.situacao(terca, true, LocalDate.of(2026, 3, 10)))
+                .isEqualTo(SituacaoDoPlano.VENCIDO);
     }
 
     @Test
-    @DisplayName("a renovação paga o período vencido, adiantada ou atrasada, sem deslocar o ciclo")
-    void renovacaoPagaOPeriodoVencido() {
-        LocalDate vencimento = LocalDate.of(2026, 3, 10);
-        Periodo marco = new Periodo(vencimento, LocalDate.of(2026, 4, 10));
-
-        assertThat(CicloDeVencimento.periodoDaRenovacao(vencimento, 10, LocalDate.of(2026, 3, 5)))
-                .as("adiantada")
-                .isEqualTo(marco);
-        assertThat(CicloDeVencimento.periodoDaRenovacao(vencimento, 10, LocalDate.of(2026, 3, 25)))
-                .as("na tolerância ou já suspensa, dentro do período vencido")
-                .isEqualTo(marco);
-        assertThat(CicloDeVencimento.periodoDaRenovacao(vencimento, 10, LocalDate.of(2026, 4, 9)))
-                .isEqualTo(marco);
-    }
-
-    @Test
-    @DisplayName("com mais de um período vencido, a renovação paga o corrente e deixa os anteriores")
-    void renovacaoDepoisDeVariosMeses() {
-        LocalDate vencimento = LocalDate.of(2026, 3, 10);
-
-        assertThat(CicloDeVencimento.periodoDaRenovacao(vencimento, 10, LocalDate.of(2026, 4, 10)))
-                .isEqualTo(new Periodo(LocalDate.of(2026, 4, 10), LocalDate.of(2026, 5, 10)));
-        assertThat(CicloDeVencimento.periodoDaRenovacao(vencimento, 10, LocalDate.of(2026, 6, 20)))
-                .isEqualTo(new Periodo(LocalDate.of(2026, 6, 10), LocalDate.of(2026, 7, 10)));
-
-        // Ciclo do dia 31: o período corrente começa no último dia de março e termina no de abril.
-        assertThat(CicloDeVencimento.periodoDaRenovacao(LocalDate.of(2026, 2, 28), 31,
-                LocalDate.of(2026, 4, 5)))
-                .isEqualTo(new Periodo(LocalDate.of(2026, 3, 31), LocalDate.of(2026, 4, 30)));
+    @DisplayName("a renovação paga o mês que começa no vencimento, mesmo no ciclo do dia 31")
+    void renovacaoPagaOMesDoVencimento() {
+        assertThat(CicloDeVencimento.periodoDaRenovacao(LocalDate.of(2026, 3, 10), 10))
+                .isEqualTo(new Periodo(LocalDate.of(2026, 3, 10), LocalDate.of(2026, 4, 10)));
+        assertThat(CicloDeVencimento.periodoDaRenovacao(LocalDate.of(2026, 2, 28), 31))
+                .isEqualTo(new Periodo(LocalDate.of(2026, 2, 28), LocalDate.of(2026, 3, 31)));
     }
 
     @Test

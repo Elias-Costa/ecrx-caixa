@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import br.com.caixasimples.contas.internal.Conta;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /** A marca da raiz só avança uma vez; o serviço trata login repetido antes de chamá-la. */
@@ -11,7 +12,7 @@ class ContaPrimeiroAcessoTest {
 
     @Test
     void raizRecusaMarcarOPrimeiroAcessoDuasVezes() {
-        Conta conta = new Conta("Cafeteria", "cafeteria", Plano.GRATIS);
+        Conta conta = new Conta("Cafeteria", "cafeteria", Instant.now());
         conta.marcarCatalogoInicialAplicado();
 
         assertThat(conta.isCatalogoInicialAplicado()).isTrue();

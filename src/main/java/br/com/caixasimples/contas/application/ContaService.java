@@ -5,7 +5,7 @@ import br.com.caixasimples.contas.internal.Conta;
 import br.com.caixasimples.contas.internal.ContaRepository;
 import br.com.caixasimples.contas.PrimeiroAcessoDaConta;
 import br.com.caixasimples.contas.MovimentosDeEstoqueDaConta;
-import br.com.caixasimples.contas.RecursoDoPlano;
+import java.time.Instant;
 import br.com.caixasimples.shared.ContaId;
 import br.com.caixasimples.shared.FusoDeReferencia;
 import br.com.caixasimples.shared.TenantContext;
@@ -18,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Casos de uso da Conta em operação: consultar e configurar o estoque e a exigência do NSU no
- * cartão, corrigir o nome do negócio, marcar o primeiro acesso e conferir se o plano dá direito a um
- * recurso. A chave Pix fica com a autenticação, porque a troca dela confere a senha atual.
+ * cartão, corrigir o nome do negócio, marcar o primeiro acesso e conferir se a Conta está só leitura.
+ * A chave Pix fica com a autenticação, porque a troca dela confere a senha atual.
  *
  * <p><strong>Nenhum método recebe a conta como parâmetro, e essa ausência é a regra.</strong>
  * {@code Conta} é a única entidade de negócio sem filtro automático de tenant, porque o id dela
@@ -30,8 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>O módulo de estoque pergunta se a conta ligou o controle (RF17) antes de dar baixa numa
  * venda concluída, e o módulo de vendas pergunta se ela exige o NSU antes de gravar um pagamento
  * em cartão. O login chama a marca do primeiro acesso (RF32) dentro deste módulo, que publica o
- * fato para o cadastro reagir sem receber uma chamada direta de escrita. Estoque e relatórios
- * perguntam pelo recurso do plano antes de cada caso de uso pago.
+ * fato para o cadastro reagir sem receber uma chamada direta de escrita. Vendas e caixa perguntam
+ * se a Conta está só leitura antes de cada gesto que começa algo no balcão.
  */
 @Service
 public class ContaService {
@@ -65,30 +65,31 @@ public class ContaService {
     }
 
     /**
-     * Recusa a operação se o plano da Conta não inclui o recurso, ou se os recursos pagos estão
-     * suspensos por falta de renovação. Na tolerância depois do vencimento, o recurso ainda vale.
+     * Recusa o gesto que começa algo no balcão se a Conta está só leitura: começar venda, abrir
+     * caixa, sangria, suprimento, receber fiado e cobrar pelo Pix integrado. Os outros gestos não
+     * perguntam, e por isso a comanda começada antes do só leitura termina, e o caixa aberto fecha.
      *
-     * <p>Quem chama confere o perfil antes: o operador recebe a recusa de perfil, e a Conta sem o
-     * recurso, a do plano. O dia é o de hoje no balcão, porque a suspensão começa à meia-noite
-     * de lá, e não do servidor.
+     * <p>O gesto feito antes do início do só leitura passa, mesmo que chegue depois, porque a Conta
+     * estava em dia quando ele aconteceu: é a venda lançada sem rede no último dia da tolerância. O
+     * dia do gesto e o de hoje são os do balcão, porque o só leitura começa à meia-noite de lá. Quem
+     * chama confere antes se o gesto já foi gravado, para o reenvio de um gesto aplicado não ser
+     * recusado.
      *
-     * @throws RecursoForaDoPlanoException se o plano não inclui o recurso
-     * @throws PlanoSuspensoException se o plano inclui o recurso, mas está suspenso
+     * @param feitoEm quando o gesto foi feito: agora, na rota, e o instante do aparelho, no lote
+     * @throws ContaSomenteLeituraException se a Conta está só leitura e o gesto foi feito nele
      */
     @Transactional(readOnly = true)
-    public void exigirRecurso(RecursoDoPlano recurso) {
-        exigirRecurso(contaDoContexto(), recurso);
-    }
-
-    private static void exigirRecurso(Conta conta, RecursoDoPlano recurso) {
-        Objects.requireNonNull(recurso, "recurso nao pode ser nulo");
-        LocalDate hoje = LocalDate.now(FusoDeReferencia.DO_BALCAO);
-        if (!conta.getPlano().inclui(recurso)) {
-            throw new RecursoForaDoPlanoException(recurso, conta.getPlano());
+    public void exigirOperacao(Instant feitoEm) {
+        Objects.requireNonNull(feitoEm, "instante do gesto nao pode ser nulo");
+        Conta conta = contaDoContexto();
+        if (!conta.somenteLeitura(LocalDate.now(FusoDeReferencia.DO_BALCAO))) {
+            return;
         }
-        if (!conta.temRecurso(recurso, hoje)) {
-            throw new PlanoSuspensoException(conta.inicioDaSuspensao());
+        LocalDate inicio = conta.inicioDoSomenteLeitura();
+        if (LocalDate.ofInstant(feitoEm, FusoDeReferencia.DO_BALCAO).isBefore(inicio)) {
+            return;
         }
+        throw new ContaSomenteLeituraException(inicio);
     }
 
     private Conta contaDoContexto() {
@@ -121,11 +122,7 @@ public class ContaService {
      * Altera o controle da Conta autenticada (RF17). Depois do primeiro movimento, desligar faria
      * as vendas continuarem sem atualizar o saldo; a checagem consulta também produtos inativos.
      *
-     * <p>Ligar exige o recurso de estoque do plano. Desligar não: a Conta sem o recurso ainda pode
-     * desligar um controle que ficou ligado, enquanto não houver movimento.
-     *
-     * @throws RecursoForaDoPlanoException se liga sem o plano que inclui o estoque
-     * @throws PlanoSuspensoException se liga com os recursos pagos suspensos
+     * <p>Vale também no só leitura: o controle não põe nem tira dinheiro do balcão.
      */
     @Transactional
     public ConfiguracaoDaConta definirEstoqueHabilitado(boolean habilitado) {
@@ -134,9 +131,6 @@ public class ContaService {
         Conta conta = contas.buscarParaAtualizar(contaId.valor())
                 .orElseThrow(() -> new IllegalStateException(
                         "conta do contexto nao existe: " + contaId));
-        if (habilitado && !conta.isEstoqueHabilitado()) {
-            exigirRecurso(conta, RecursoDoPlano.ESTOQUE);
-        }
         boolean comMovimentos = movimentos.existem();
         if (!habilitado && conta.isEstoqueHabilitado() && comMovimentos) {
             throw new EstoqueComMovimentosException();

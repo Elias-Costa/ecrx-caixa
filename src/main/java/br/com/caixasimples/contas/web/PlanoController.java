@@ -104,17 +104,20 @@ class PlanoController {
     }
 
     /**
-     * @param vencimento        omitido no plano gratuito
-     * @param inicioDaSuspensao omitido no plano gratuito
+     * Os campos de antes continuam com o nome e o sentido de antes, porque o aplicativo instalado os
+     * lê; o teste entra num campo novo.
+     *
+     * @param emTeste           se nenhum período foi pago ainda
+     * @param inicioDaSuspensao o primeiro dia em só leitura se o pagamento não chegar
      * @param pedidoAberto      omitido sem pedido à espera do código
      */
-    record EstadoNaResposta(String plano, String situacao, LocalDate vencimento,
+    record EstadoNaResposta(String plano, String situacao, boolean emTeste, LocalDate vencimento,
             LocalDate inicioDaSuspensao, List<String> recursos, BigDecimal mensalidadeCompleto,
             List<PropostaNaResposta> propostas, PedidoNaResposta pedidoAberto) {
 
         static EstadoNaResposta de(EstadoDoPlano estado) {
             return new EstadoNaResposta(estado.plano().name(), estado.situacao().name(),
-                    estado.vencimento(), estado.inicioDaSuspensao(),
+                    estado.emTeste(), estado.vencimento(), estado.inicioDaSuspensao(),
                     estado.recursos().stream().map(RecursoDoPlano::name).toList(),
                     estado.mensalidadeCompleto().valor(),
                     estado.propostas().stream().map(PropostaNaResposta::de).toList(),
