@@ -685,16 +685,21 @@ Conta nasce pelo seed: uma execução avulsa da imagem, com o perfil `seed` e se
 cria a Conta com o administrador e termina. Nunca no serviço. Rodar de novo com o mesmo e-mail não
 cria nada.
 
-**Na VPS**, como root. O nome do negócio, o e-mail e a senha são lidos pelo `read`, a senha sem eco, e
-o histórico do shell guarda só os comandos: nada que identifica o administrador fica nele.
+**Na VPS**, como root. O nome e o tipo do negócio, o e-mail e a senha são lidos pelo `read`, a senha
+sem eco, e o histórico do shell guarda só os comandos: nada que identifica o administrador fica nele.
 
 ```bash
 read -rp 'Nome do negócio: ' ECRX_CAIXA_SEED_NOME_NEGOCIO && export ECRX_CAIXA_SEED_NOME_NEGOCIO
+read -rp 'Tipo do negócio (cafeteria, ou Enter para nenhum): ' ECRX_CAIXA_SEED_TIPO_NEGOCIO && export ECRX_CAIXA_SEED_TIPO_NEGOCIO
 read -rp 'E-mail do administrador: ' ECRX_CAIXA_SEED_EMAIL && export ECRX_CAIXA_SEED_EMAIL
 read -rsp 'Senha provisória: ' ECRX_CAIXA_SEED_SENHA && echo && export ECRX_CAIXA_SEED_SENHA
 sh compose.sh --profile seed run --rm seed
-unset ECRX_CAIXA_SEED_NOME_NEGOCIO ECRX_CAIXA_SEED_EMAIL ECRX_CAIXA_SEED_SENHA
+unset ECRX_CAIXA_SEED_NOME_NEGOCIO ECRX_CAIXA_SEED_TIPO_NEGOCIO ECRX_CAIXA_SEED_EMAIL ECRX_CAIXA_SEED_SENHA
 ```
+
+O tipo é opcional e decide o catálogo sugerido (RF32): com `cafeteria`, o primeiro login do
+administrador copia para Produtos os oito itens da cafeteria, com o preço zerado para ele preencher. Em
+branco, ou com um tipo sem catálogo, Produtos começa vazio. Hoje só a cafeteria tem catálogo.
 
 O log termina com `Conta <id> criada`. A senha passa pela mesma política de qualquer senha, inclusive
 a verificação de vazamento, e é provisória: no primeiro acesso, o aplicativo só mostra a tela de troca,
