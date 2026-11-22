@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { SemConexao } from '../api/cliente'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { ErroDaApi, SemConexao } from '../api/cliente'
 import {
   contas, type EstadoDoPlano, type PedidoDePlano, type PropostaDePlano, type TipoDePedido,
 } from '../api/contas'
@@ -9,6 +9,7 @@ import type { Plano, SituacaoDoPlano } from '../sessao/Identidade'
 import { useSessao } from '../sessao/useSessao'
 import { useConexao } from '../shell/useConexao'
 import { erroDeCadastro } from './erroDeCadastro'
+import { ErroDoCampo, Mensagem } from './Mensagem'
 import { useConfirmacao } from './useConfirmacao'
 import { TituloComAjuda } from './TituloComAjuda'
 import { AJUDA } from './textosDeAjuda'
@@ -37,6 +38,12 @@ const NOME_DA_SITUACAO: Record<SituacaoDoPlano, string> = {
   SUSPENSO: 'Suspenso',
 }
 
+const PEDIDO_REGISTRADO = 'Pedido registrado. Mande o texto abaixo pelo canal de atendimento e faça o'
+  + ' Pix do valor; o código chega depois da conferência.'
+
+/** A recusa do código, e se ela é do que foi digitado: sem conexão, o campo não está errado. */
+type ErroDoCodigo = { texto: string; recusado: boolean }
+
 /**
  * O pagamento do plano pela própria Conta (RF31). O administrador pede, manda o texto do pedido
  * pelo canal de atendimento e faz o Pix; depois de conferir o Pix, o mantenedor entrega um código,
@@ -51,8 +58,16 @@ export function TelaDoPlano() {
   // Pedir plano e aplicar código dependem do servidor responder, não só da rede do navegador.
   const online = useConexao() === 'com-servidor'
   const [estado, setEstado] = useState<EstadoDoPlano | null>(null)
+  // O erro do alto é só o da leitura da tela. Cada resposta a um toque fica perto dele: a do pedido,
+  // no bloco do pedido, acima do texto; a da cópia, junto dos botões; a do código, embaixo do campo;
+  // e o código aplicado, no cartão do plano, porque o bloco do pedido some e é no cartão que a
+  // situação e o vencimento novos aparecem.
   const [erro, setErro] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
+  const [erroDoPedido, setErroDoPedido] = useState<string | null>(null)
+  const [pedidoRegistrado, setPedidoRegistrado] = useState(false)
+  const [avisoDaCopia, setAvisoDaCopia] = useState<string | null>(null)
+  const [erroDoCodigo, setErroDoCodigo] = useState<ErroDoCodigo | null>(null)
+  const [codigoAplicado, setCodigoAplicado] = useState(false)
   const [codigo, setCodigo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [confirmar, dialogoDeConfirmacao] = useConfirmacao()
@@ -68,6 +83,14 @@ export function TelaDoPlano() {
 
   useEffect(() => { queueMicrotask(() => void carregar()) }, [carregar])
 
+  function limparRespostas() {
+    setErroDoPedido(null)
+    setPedidoRegistrado(false)
+    setAvisoDaCopia(null)
+    setErroDoCodigo(null)
+    setCodigoAplicado(false)
+  }
+
   async function pedir(proposta: PropostaDePlano) {
     if (!estado) return
     if (estado.pedidoAberto) {
@@ -79,15 +102,13 @@ export function TelaDoPlano() {
       if (!sim) return
     }
     setEnviando(true)
-    setErro(null)
-    setAviso(null)
+    limparRespostas()
     try {
       await contas.pedirPlano(proposta.plano)
       await carregar()
-      setAviso('Pedido registrado. Mande o texto abaixo pelo canal de atendimento e faça o Pix do'
-        + ' valor; o código chega depois da conferência.')
+      setPedidoRegistrado(true)
     } catch (falha) {
-      setErro(mensagemDe(falha))
+      setErroDoPedido(mensagemDe(falha))
     } finally {
       setEnviando(false)
     }
@@ -98,15 +119,19 @@ export function TelaDoPlano() {
     const pedido = estado?.pedidoAberto
     if (!pedido) return
     setEnviando(true)
-    setErro(null)
-    setAviso(null)
+    limparRespostas()
     try {
       setEstado(await contas.aplicarCodigo(pedido.id, codigo))
       setCodigo('')
-      setAviso('Código aplicado. O plano já vale.')
+      setCodigoAplicado(true)
       await lerIdentidadeDoServidor()
     } catch (falha) {
-      setErro(mensagemDe(falha))
+      // O 400 é o código recusado ou em branco; o pedido substituído e a falta de conexão também
+      // ficam embaixo do campo, que é onde se tocou, mas sem marcar como errado o que se digitou.
+      setErroDoCodigo({
+        texto: mensagemDe(falha),
+        recusado: falha instanceof ErroDaApi && falha.status === 400,
+      })
     } finally {
       setEnviando(false)
     }
@@ -126,9 +151,9 @@ export function TelaDoPlano() {
   async function copiar(texto: string) {
     try {
       await navigator.clipboard.writeText(texto)
-      setAviso('Texto do pedido copiado.')
+      setAvisoDaCopia('Texto do pedido copiado.')
     } catch {
-      setAviso('Não foi possível copiar. Selecione o texto do pedido e copie à mão.')
+      setAvisoDaCopia('Não foi possível copiar. Selecione o texto do pedido e copie à mão.')
     }
   }
 
@@ -143,7 +168,6 @@ export function TelaDoPlano() {
   return <section className="cadastro">
     <TituloComAjuda titulo="Plano" ajuda={AJUDA.plano} />
     {erro && <p className="mensagem-erro" role="alert">{erro}</p>}
-    {aviso && <p className="mensagem-info" role="status">{aviso}</p>}
     {!online && <p className="mensagem-info" role="status">Pedir plano e aplicar código precisam de conexão.</p>}
 
     {estado && <>
@@ -159,6 +183,7 @@ export function TelaDoPlano() {
           <p>A Conta está só leitura desde {mostrarData(estado.inicioDaSuspensao)}: não começa venda nem
             abre caixa. Fechar o caixa aberto, os relatórios e o cadastro continuam. O pagamento
             devolve tudo, e o mês pago começa no dia em que o código for aplicado.</p>}
+        <Mensagem tipo="sucesso" texto={codigoAplicado ? 'Código aplicado. O plano já vale.' : null} />
       </section>
 
       <h3>O que o plano inclui</h3>
@@ -171,16 +196,22 @@ export function TelaDoPlano() {
       <p className="cadastro__apoio">O pedido não muda o plano. Mande o texto do pedido pelo canal
         de atendimento e faça o Pix do valor; depois da conferência, você recebe um código e o
         aplica aqui.</p>
+      {/* Com um pedido aberto, a ação da vez é aplicar o código dele. Pedir de novo continua
+          possível, porque substitui o aberto, mas sem disputar a atenção com o Aplicar código. */}
       <div className="cadastro__acoes">
         {estado.propostas.map((proposta) =>
-          <button className="botao" type="button" key={`${proposta.tipo}-${proposta.plano}`}
+          <button className={estado.pedidoAberto ? 'botao botao--secundario' : 'botao'} type="button"
+            key={`${proposta.tipo}-${proposta.plano}`}
             disabled={enviando || !online} onClick={() => void pedir(proposta)}>
             {rotuloDaProposta(proposta, estado.emTeste)}
           </button>)}
       </div>
+      <Mensagem tipo="erro" texto={erroDoPedido} />
 
       {estado.pedidoAberto && <PedidoAberto pedido={estado.pedidoAberto} enviando={enviando}
         online={online} codigo={codigo} definirCodigo={setCodigo}
+        registrado={pedidoRegistrado ? PEDIDO_REGISTRADO : null} avisoDaCopia={avisoDaCopia}
+        erroDoCodigo={erroDoCodigo}
         aplicar={(evento) => void aplicar(evento)} copiar={(texto) => void copiar(texto)}
         compartilhar={(texto) => void compartilhar(texto)} />}
     </>}
@@ -194,6 +225,10 @@ type PropsDoPedido = {
   online: boolean
   codigo: string
   definirCodigo: (codigo: string) => void
+  /** A frase de logo depois do pedido, que fica acima do texto que ela manda mandar. */
+  registrado: string | null
+  avisoDaCopia: string | null
+  erroDoCodigo: ErroDoCodigo | null
   aplicar: (evento: FormEvent) => void
   copiar: (texto: string) => void
   compartilhar: (texto: string) => void
@@ -202,8 +237,18 @@ type PropsDoPedido = {
 function PedidoAberto(props: PropsDoPedido) {
   const texto = textoDoPedido(props.pedido)
   const podeCompartilhar = typeof navigator.share === 'function'
-  return <form className="cadastro__formulario" onSubmit={props.aplicar}>
-    <h3>Pedido à espera do código</h3>
+  const campoDoCodigo = useRef<HTMLInputElement>(null)
+
+  // Com a recusa, o foco vai ao campo, para corrigir ou repetir sem procurar, e o leitor de tela lê
+  // a recusa junto com ele.
+  useEffect(() => {
+    if (props.erroDoCodigo) campoDoCodigo.current?.focus()
+  }, [props.erroDoCodigo])
+
+  return <form className="cadastro__formulario" aria-labelledby="plano-pedido-titulo"
+    onSubmit={props.aplicar}>
+    <h3 id="plano-pedido-titulo">Pedido à espera do código</h3>
+    <Mensagem tipo="sucesso" texto={props.registrado} />
     <textarea className="campo__entrada" readOnly rows={6} value={texto}
       aria-label="Texto do pedido" />
     <div className="cadastro__acoes">
@@ -212,11 +257,17 @@ function PedidoAberto(props: PropsDoPedido) {
       {podeCompartilhar && <button className="botao botao--secundario" type="button"
         onClick={() => props.compartilhar(texto)}>Compartilhar</button>}
     </div>
-    <label className="campo"><span className="campo__rotulo">Código de ativação</span>
-      <input className="campo__entrada" value={props.codigo} required autoComplete="off"
-        placeholder="XXXX-XXXX-XXXX-XXXX"
+    <Mensagem tipo="info" texto={props.avisoDaCopia} />
+    {/* A mensagem do campo fica fora do rótulo, que continua sendo só o nome do campo. */}
+    <div className="campo">
+      <label className="campo__rotulo" htmlFor="plano-codigo">Código de ativação</label>
+      <input ref={campoDoCodigo} id="plano-codigo" className="campo__entrada" value={props.codigo}
+        required autoComplete="off" placeholder="XXXX-XXXX-XXXX-XXXX"
+        aria-invalid={props.erroDoCodigo?.recusado || undefined}
+        aria-describedby={props.erroDoCodigo ? 'plano-erro-codigo' : undefined}
         onChange={(evento) => props.definirCodigo(evento.target.value)} />
-    </label>
+      <ErroDoCampo id="plano-erro-codigo" texto={props.erroDoCodigo?.texto} />
+    </div>
     <button className="botao" disabled={props.enviando || !props.online}>
       {props.enviando ? 'Aplicando...' : 'Aplicar código'}
     </button>

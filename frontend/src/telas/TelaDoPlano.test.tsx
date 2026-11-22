@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ErroDaApi } from '../api/cliente'
@@ -79,6 +79,11 @@ const retomado: EstadoDoPlano = {
 /** O formato de moeda separa o símbolo do número com espaço inseparável; \s também o aceita. */
 const pagarNoTeste = /^Pagar o Completo de 15\/12\/2026 a 14\/01\/2027 \(R\$\s99,90\)$/
 const pagarNoSoLeitura = /^Pagar o Completo a partir do dia do código \(R\$\s99,90\)$/
+
+/** Se o primeiro vem antes do segundo na página, que é a ordem em que a pessoa os vê. */
+function antes(primeiro: Element, segundo: Element): boolean {
+  return Boolean(primeiro.compareDocumentPosition(segundo) & Node.DOCUMENT_POSITION_FOLLOWING)
+}
 
 function avisoDe(identidade: Identidade | null): string {
   return identidade ? avisoDoPlano(identidade, HOJE) ?? 'sem aviso' : 'ninguém'
@@ -169,6 +174,58 @@ describe('tela do plano', () => {
     expect(texto).not.toContain('Ana')
   })
 
+  it('a resposta do pedido aparece no bloco dele, acima do texto, e o pedir passa a secundário', async () => {
+    vi.spyOn(contas, 'plano').mockResolvedValueOnce(emTeste)
+      .mockResolvedValueOnce({ ...emTeste, pedidoAberto: renovacao })
+    vi.spyOn(contas, 'pedirPlano').mockResolvedValue(renovacao)
+    render(<ComSessao />)
+
+    const pedir = await screen.findByRole('button', { name: pagarNoTeste })
+    expect(pedir).not.toHaveClass('botao--secundario')
+    fireEvent.click(pedir)
+
+    const pedido = await screen.findByRole('form', { name: 'Pedido à espera do código' })
+    const resposta = await within(pedido).findByRole('status')
+    expect(resposta).toHaveTextContent('Pedido registrado. Mande o texto abaixo pelo canal de atendimento')
+    expect(antes(resposta, within(pedido).getByLabelText('Texto do pedido'))).toBe(true)
+    expect(screen.getAllByRole('status')).toEqual([resposta])
+    expect(screen.getByRole('button', { name: pagarNoTeste })).toHaveClass('botao--secundario')
+    expect(within(pedido).getByRole('button', { name: 'Aplicar código' })).not.toHaveClass('botao--secundario')
+  })
+
+  it('a cópia do texto responde junto dos botões, antes do campo do código', async () => {
+    vi.spyOn(contas, 'plano').mockResolvedValue({ ...emTeste, pedidoAberto: renovacao })
+    const escrever = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: escrever }, configurable: true })
+    try {
+      render(<ComSessao />)
+      const copiar = await screen.findByRole('button', { name: 'Copiar texto' })
+      fireEvent.click(copiar)
+
+      const resposta = await screen.findByText('Texto do pedido copiado.')
+      expect(escrever).toHaveBeenCalledWith(expect.stringContaining(`Pedido: ${renovacao.id}`))
+      expect(antes(copiar, resposta)).toBe(true)
+      expect(antes(resposta, screen.getByLabelText('Código de ativação'))).toBe(true)
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard')
+    }
+  })
+
+  it('a recusa do pedido aparece logo abaixo do botão de pedir', async () => {
+    vi.spyOn(contas, 'plano').mockResolvedValue(emTeste)
+    vi.spyOn(contas, 'pedirPlano').mockRejectedValue(
+      new ErroDaApi(409, 'Conflict', 'O plano gratuito não existe mais; o pedido é do plano Completo.', {}))
+    render(<ComSessao />)
+
+    const pedir = await screen.findByRole('button', { name: pagarNoTeste })
+    fireEvent.click(pedir)
+
+    const recusa = await screen.findByRole('alert')
+    expect(recusa).toHaveTextContent('O plano gratuito não existe mais; o pedido é do plano Completo.')
+    expect(antes(pedir, recusa)).toBe(true)
+    expect(antes(screen.getByRole('heading', { name: 'Pedir' }), recusa)).toBe(true)
+  })
+
   it('com um pedido aberto, pedir de novo pede confirmação antes de substituir', async () => {
     vi.spyOn(contas, 'plano').mockResolvedValue({ ...emTeste, pedidoAberto: renovacao })
     const pedir = vi.spyOn(contas, 'pedirPlano').mockResolvedValue(renovacao)
@@ -215,6 +272,12 @@ describe('tela do plano', () => {
     await waitFor(() => expect(aplicar).toHaveBeenCalledWith(adesao.id, '2jsy pfpp bna2 yxnn'))
     expect(await screen.findByText('Plano Completo')).toBeInTheDocument()
     expect(screen.getByText('Vencimento: 21/01/2027')).toBeInTheDocument()
+    // O bloco do pedido some; a resposta fica no cartão, onde a situação nova aparece.
+    const aplicado = await screen.findByRole('status')
+    expect(aplicado).toHaveTextContent('Código aplicado. O plano já vale.')
+    expect(antes(screen.getByText('Vencimento: 21/01/2027'), aplicado)).toBe(true)
+    expect(antes(aplicado, screen.getByRole('heading', { name: 'O que o plano inclui' }))).toBe(true)
+    expect(screen.queryByRole('form', { name: 'Pedido à espera do código' })).not.toBeInTheDocument()
     expect(screen.getByRole('button',
       { name: /^Renovar o Completo de 21\/01\/2027 a 20\/02\/2027 \(R\$\s99,90\)$/ }))
       .toBeInTheDocument()
@@ -256,17 +319,36 @@ describe('tela do plano', () => {
     expect(lerIdentidade()).toEqual(daContaB)
   })
 
-  it('mostra a recusa do código sem perder o pedido aberto', async () => {
+  it('mostra a recusa do código embaixo do campo, com o foco nele, sem perder o pedido aberto', async () => {
     vi.spyOn(contas, 'plano').mockResolvedValue({ ...soLeitura, pedidoAberto: adesao })
     vi.spyOn(contas, 'aplicarCodigo').mockRejectedValue(
       new ErroDaApi(400, 'Bad Request', 'Este código não é o deste pedido; confira o código que você recebeu.', {}))
     render(<ComSessao />)
 
-    fireEvent.change(await screen.findByLabelText('Código de ativação'),
-      { target: { value: '0000-0000-0000-0000' } })
+    const campo = await screen.findByLabelText('Código de ativação')
+    fireEvent.change(campo, { target: { value: '0000-0000-0000-0000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar código' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Este código não é o deste pedido; confira o código que você recebeu.')
+    await waitFor(() => expect(campo)
+      .toHaveAccessibleDescription('Este código não é o deste pedido; confira o código que você recebeu.'))
+    expect(campo).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(campo).toHaveFocus())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Texto do pedido')).toBeInTheDocument()
+  })
+
+  it('o pedido substituído também responde embaixo do campo, sem marcar o código digitado como errado', async () => {
+    vi.spyOn(contas, 'plano').mockResolvedValue({ ...soLeitura, pedidoAberto: adesao })
+    vi.spyOn(contas, 'aplicarCodigo').mockRejectedValue(
+      new ErroDaApi(409, 'Conflict', 'Este pedido foi substituído por outro; o código dele não vale mais.', {}))
+    render(<ComSessao />)
+
+    const campo = await screen.findByLabelText('Código de ativação')
+    fireEvent.change(campo, { target: { value: '2jsy pfpp bna2 yxnn' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar código' }))
+
+    await waitFor(() => expect(campo)
+      .toHaveAccessibleDescription('Este pedido foi substituído por outro; o código dele não vale mais.'))
+    expect(campo).not.toHaveAttribute('aria-invalid')
   })
 })
