@@ -1,10 +1,13 @@
 #!/bin/sh
 # O alerta de rajada, a cada 5 minutos: conta no log da aplicação as recusas dos últimos 5 minutos, que
 # são o login recusado, a troca recusada da senha, do e-mail ou da chave Pix, o token recusado, o acesso
-# recusado por perfil ou pela senha provisória e o aviso Pix recusado. Acima de 50, manda o sinal de falha ao vigia, que avisa o
-# mantenedor; até 50, o sinal normal. Uma origem sozinha não passa de 30 falhas de login na janela da
-# contenção; o que chega a 50 é a força bruta distribuída, ou a enxurrada de token falso ou de aviso Pix,
-# que nada limita. O sinal é um GET sem corpo: nenhuma linha do log sai da máquina.
+# recusado por perfil ou pela senha provisória, o aviso Pix recusado e o código de plano recusado.
+# Acima de 50, manda o sinal de falha ao vigia, que avisa o mantenedor; até 50, o sinal normal. Uma
+# origem sozinha não passa de 30 falhas de login na janela da contenção; o que chega a 50 é a força
+# bruta distribuída, ou a enxurrada de token falso, de aviso Pix ou de código de plano, que nada limita.
+# O código de plano não se adivinha, mas a enxurrada dele diz que um acesso de administrador está nas
+# mãos erradas ou que algo gera códigos errados, e cada tentativa ocupa o servidor. O sinal é um GET
+# sem corpo: nenhuma linha do log sai da máquina.
 #
 # Sem conseguir ler o log, o script não manda sinal nenhum, e o check só cai depois da tolerância:
 # assim a troca da aplicação no deploy não vira alerta.
@@ -32,7 +35,7 @@ fi
 # O valor de cada campo do evento nunca tem espaço, então o nome vem entre espaços ou no fim da linha,
 # e um caminho que contenha o texto de um evento não conta.
 recusas=$(grep -cE \
-    ' evento=(login\.recusado|senha\.troca_recusada|email\.troca_recusada|chave_pix\.troca_recusada|token\.recusado|acesso\.recusado|webhook\.recusado)( |$)' \
+    ' evento=(login\.recusado|senha\.troca_recusada|email\.troca_recusada|chave_pix\.troca_recusada|token\.recusado|acesso\.recusado|webhook\.recusado|plano\.codigo_recusado)( |$)' \
     "$log")
 echo "$recusas recusas nos últimos 5 minutos, com limite de $LIMITE."
 

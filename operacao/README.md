@@ -1548,9 +1548,11 @@ recusas, o erro da aplicação ou do aplicativo, e o deploy da madrugada recusad
 que falha aparece no CI, que fica vermelho, e o GitHub avisa por e-mail.
 
 **O alerta de recusas** conta os [eventos de segurança](#a-vps) de login recusado, troca recusada da
-senha, do e-mail ou da chave Pix, token recusado, acesso recusado por perfil ou pela senha provisória e aviso Pix recusado. Uma origem sozinha não passa
+senha, do e-mail ou da chave Pix, token recusado, acesso recusado por perfil ou pela senha provisória, aviso Pix recusado e código de plano recusado. Uma origem sozinha não passa
 de 30 falhas de login na janela da contenção; acima de 50 em 5 minutos é força bruta distribuída, ou
-enxurrada de token falso ou de aviso Pix, que nada limita. Uma Conta suspensa cujos aparelhos continuam
+enxurrada de token falso, de aviso Pix ou de código de plano, que nada limita. O código de plano tem
+80 bits e não se adivinha; a enxurrada dele indica um acesso de administrador nas mãos erradas ou um
+defeito. Uma Conta suspensa cujos aparelhos continuam
 pedindo também entra na contagem, com o motivo `conta_suspensa`. Com o aviso, a origem e a Conta atacada
 estão no log, e uma origem pode ser bloqueada como em [Incidente de segurança](#incidente-de-segurança):
 
