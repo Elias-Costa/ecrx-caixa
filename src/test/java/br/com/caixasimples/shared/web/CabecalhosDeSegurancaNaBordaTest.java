@@ -33,12 +33,12 @@ class CabecalhosDeSegurancaNaBordaTest extends TesteDeIntegracao {
 
     private static final String SENHA = "uma senha longa de teste";
 
-    private static final String POLITICA_DE_CONTEUDO = "default-src 'self'; script-src 'self'; "
+    private static final String POLITICA_DE_CONTEUDO = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
             + "style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; "
             + "manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; "
             + "form-action 'self'; frame-ancestors 'none'";
 
-    private static final String POLITICA_DE_PERMISSOES = "camera=(), microphone=(), geolocation=(), "
+    private static final String POLITICA_DE_PERMISSOES = "camera=(self), microphone=(), geolocation=(), "
             + "payment=(), usb=(), clipboard-write=(self), web-share=(self)";
 
     private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
@@ -81,6 +81,21 @@ class CabecalhosDeSegurancaNaBordaTest extends TesteDeIntegracao {
         conferirPoliticas(manifest);
         assertThat(inexistente.statusCode()).isEqualTo(404);
         conferirPoliticas(inexistente);
+    }
+
+    /**
+     * O navegador só compila em fluxo o WebAssembly que chega como {@code application/wasm}; com outro
+     * tipo, o leitor de código de barras cai num caminho mais lento e avisa no console. O tipo vem do
+     * servidor de verdade, e não do contexto simulado, que tem outra tabela de extensões.
+     */
+    @Test
+    @DisplayName("o leitor em WebAssembly sai como application/wasm, com as três políticas")
+    void leitorEmWebAssembly() throws Exception {
+        HttpResponse<String> leitor = enviar(pedido("/assets/aplicativo-de-teste.wasm"));
+
+        assertThat(leitor.statusCode()).isEqualTo(200);
+        assertThat(leitor.headers().firstValue("Content-Type")).hasValue("application/wasm");
+        conferirPoliticas(leitor);
     }
 
     @Test

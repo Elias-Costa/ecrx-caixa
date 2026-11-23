@@ -22,6 +22,7 @@ import { useSincronizacao } from '../shell/sincronizacao'
 import { useCelular } from '../shell/useCelular'
 import { useConexao } from '../shell/useConexao'
 import { useSessao } from '../sessao/useSessao'
+import { BotaoDaCamera } from './BotaoDaCamera'
 import { CampoDeDinheiro } from './CampoDeDinheiro'
 import { erroDeCadastro } from './erroDeCadastro'
 import { filtrarPorNome, naOrdemDaBusca } from './filtroPorNome'
@@ -949,13 +950,7 @@ export function TelaDeVenda() {
   function lerPeloEnter() {
     const termoLido = busca.trim()
     if (!termoLido || !sessao) return
-    if (descontoDigitado(descontoItem) === null) {
-      falhar('busca', 'Informe o desconto do item com até duas casas decimais.')
-      return
-    }
-    // A quantidade que o servidor recusaria é recusada antes, com o mesmo texto: com a comanda concluída ou vazia, a
-    // ida abriria antes da recusa uma venda nova, que ficaria aberta e vazia no caixa.
-    const recusa = recusaDaQuantidade(numero(quantidade))
+    const recusa = recusaDoCodigo()
     if (recusa) {
       falhar('busca', recusa)
       return
@@ -965,11 +960,40 @@ export function TelaDeVenda() {
       produto = escolhidoPeloEnter(resultados, termoLido)
       if (!produto) return
     }
+    guardarCodigo(termoLido, produto)
+    setBusca(''); setResultados([]); setBuscado('')
+  }
+
+  /**
+   * O código lido pela câmera entra como o Enter do leitor USB, pela mesma fila e com as mesmas recusas, e vai sem
+   * produto, buscado na vez dele. O texto que estava na busca fica como estava: não foi ele que se leu.
+   */
+  function lerDaCamera(codigo: string) {
+    const termoLido = codigo.trim()
+    if (termoLido && sessao) {
+      const recusa = recusaDoCodigo()
+      if (recusa) falhar('busca', recusa)
+      else guardarCodigo(termoLido)
+    }
+    buscaRef.current?.focus()
+  }
+
+  /**
+   * A quantidade que o servidor recusaria é recusada antes, com o mesmo texto: com a comanda concluída ou vazia, a
+   * ida abriria antes da recusa uma venda nova, que ficaria aberta e vazia no caixa.
+   */
+  function recusaDoCodigo(): string | undefined {
+    if (descontoDigitado(descontoItem) === null) return 'Informe o desconto do item com até duas casas decimais.'
+    return recusaDaQuantidade(numero(quantidade))
+  }
+
+  /** A quantidade e o desconto da tela vão com o código e voltam ao padrão para a leitura seguinte. */
+  function guardarCodigo(termo: string, produto?: Produto) {
     // A primeira leitura com a comanda livre começa sem o aviso da anterior; a que chega com outra em curso deixa à
     // vista o aviso do código que ficou de fora.
     if (!comandaOcupada) setErro(undefined)
-    guardarLeitura({ termo: termoLido, quantidade, descontoItem, produto })
-    setBusca(''); setResultados([]); setBuscado(''); setQuantidade('1'); setDescontoItem('')
+    guardarLeitura({ termo, quantidade, descontoItem, produto })
+    setQuantidade('1'); setDescontoItem('')
   }
 
   function mudarBusca(texto: string) {
@@ -1021,15 +1045,22 @@ export function TelaDeVenda() {
               teclado virtual; o leitor de tela continua achando o painel por ele. */}
           <h3 className="pdv__titulo-da-busca">Busca de produtos</h3>
           <div className="pdv__busca">
-            <label>Produto por nome ou código
-              <input ref={buscaRef} autoFocus value={busca} onChange={(evento) => mudarBusca(evento.target.value)}
-                onKeyDown={(evento) => {
-                  if (evento.key !== 'Enter') return
-                  evento.preventDefault()
-                  lerPeloEnter()
-                }}
-                placeholder="Digite ou passe o código" />
-            </label>
+            {/* O rótulo não envolve o campo: o botão da câmera fica colado no campo e fora do rótulo, para o nome
+                do campo continuar sendo só o rótulo. */}
+            <div className="pdv__campo-da-busca">
+              <label htmlFor="pdv-busca">Produto por nome ou código</label>
+              <div className="campo__leitura">
+                <input ref={buscaRef} id="pdv-busca" autoFocus value={busca}
+                  onChange={(evento) => mudarBusca(evento.target.value)}
+                  onKeyDown={(evento) => {
+                    if (evento.key !== 'Enter') return
+                    evento.preventDefault()
+                    lerPeloEnter()
+                  }}
+                  placeholder="Digite ou passe o código" />
+                <BotaoDaCamera aoLer={lerDaCamera} />
+              </div>
+            </div>
             <label>Quantidade
               <input type="number" min="0.001" step="0.001" value={quantidade}
                 onChange={(evento) => setQuantidade(evento.target.value)} />

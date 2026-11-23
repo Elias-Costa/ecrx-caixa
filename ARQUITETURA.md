@@ -474,10 +474,12 @@ Como o token fica no aparelho, ao alcance de qualquer script da origem, toda res
 política de conteúdo aplicada: script, estilo, imagem, fonte, conexão, manifest e service worker só
 da própria origem, nada embutido no HTML, nenhum objeto e nenhuma moldura por outro site. Um script
 injetado no futuro, por dependência ou por código novo, não carrega nada de fora nem envia o token
-para outra origem. O build do aplicativo não tem script nem estilo embutido, então a política não
-precisa de exceção. Nenhum `Referer` sai, nem para a própria origem, e a política de permissões nega
-câmera, microfone, localização, pagamento e USB, deixando à própria origem a área de transferência e
-o compartilhamento, que o copia e cola do Pix e o comprovante usam. Os cabeçalhos saem da cadeia de
+para outra origem. O build do aplicativo não tem script nem estilo embutido, e a única exceção da
+política é compilar WebAssembly, que o leitor de código de barras pela câmera usa, com o arquivo
+vindo da própria origem; ela não libera avaliar texto como script. Nenhum `Referer` sai, nem para a
+própria origem, e a política de permissões nega microfone, localização, pagamento e USB, deixando à
+própria origem a câmera, que lê o código de barras, a área de transferência e o compartilhamento,
+que o copia e cola do Pix e o comprovante usam. Os cabeçalhos saem da cadeia de
 segurança da aplicação, ao lado do HSTS, então valem atrás de qualquer proxy e no jar sozinho.
 
 Usuário novo nasce pela gestão de usuários da conta, feita pelo administrador: um `Usuario`, que

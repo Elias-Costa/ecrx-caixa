@@ -6,6 +6,7 @@ import { apagarRascunho, chaveDoRascunho, guardarRascunho, lerRascunho } from '.
 import { useSessao } from '../sessao/useSessao'
 import { listarGestos } from '../offline/fila'
 import { paraBusca } from '../textoDeBusca'
+import { BotaoDaCamera } from './BotaoDaCamera'
 import { erroDeCadastro, errosDosCampos } from './erroDeCadastro'
 import { filtrarPorNome } from './filtroPorNome'
 import { ErroDoCampo, Mensagem } from './Mensagem'
@@ -147,6 +148,7 @@ export function TelaDeProdutos() {
   const [erroDoInativo, setErroDoInativo] = useState<{ id: string; texto: string } | null>(null)
   const [pendentes, setPendentes] = useState(0)
   const formularioRef = useRef<HTMLFormElement>(null)
+  const codigoRef = useRef<HTMLInputElement>(null)
   const [confirmar, dialogoDeConfirmacao] = useConfirmacao()
 
   const carregar = useCallback(async () => {
@@ -217,6 +219,12 @@ export function TelaDeProdutos() {
 
   function campo(campo: keyof Omit<Formulario, 'atributos'>, valor: string) {
     setFormulario((atual) => ({ ...atual, [campo]: valor }))
+  }
+
+  /** O código lido entra no campo como se fosse digitado, no lugar do que estava, e só grava ao salvar. */
+  function lerCodigoDaCamera(codigo: string) {
+    campo('codigo', codigo.trim())
+    codigoRef.current?.focus()
   }
 
   function mudarAtributo(indice: number, campo: 'chave' | 'valor', valor: string) {
@@ -376,7 +384,10 @@ export function TelaDeProdutos() {
             {/* Sempre montado, para o leitor de tela anunciar o aviso quando o texto aparece. */}
             <span id="produto-aviso-nome" className="campo__aviso" role="status">{nomeRepetido ? 'Já existe um item ativo com este nome. Na busca do balcão, os dois aparecem iguais.' : ''}</span></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-preco">Preço (R$)</label><input id="produto-preco" className="campo__entrada" value={formulario.preco} onChange={(evento) => campo('preco', evento.target.value)} inputMode="decimal" required {...marcaDoCampo('preco')} /><ErroDoCampo id="produto-erro-preco" texto={camposComErro.preco} /></div>
-          <div className="campo"><label className="campo__rotulo" htmlFor="produto-codigo">Código (opcional)</label><input id="produto-codigo" className="campo__entrada" value={formulario.codigo} onChange={(evento) => campo('codigo', evento.target.value)} maxLength={60} {...marcaDoCampo('codigo')} /><ErroDoCampo id="produto-erro-codigo" texto={camposComErro.codigo} /></div>
+          <div className="campo"><label className="campo__rotulo" htmlFor="produto-codigo">Código (opcional)</label>
+            <div className="campo__leitura"><input ref={codigoRef} id="produto-codigo" className="campo__entrada" value={formulario.codigo} onChange={(evento) => campo('codigo', evento.target.value)} maxLength={60} {...marcaDoCampo('codigo')} />
+              <BotaoDaCamera aoLer={lerCodigoDaCamera} /></div>
+            <ErroDoCampo id="produto-erro-codigo" texto={camposComErro.codigo} /></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-categoria">Categoria (opcional)</label><input id="produto-categoria" className="campo__entrada" value={formulario.categoria} onChange={(evento) => campo('categoria', evento.target.value)} maxLength={60} {...marcaDoCampo('categoria')} /><ErroDoCampo id="produto-erro-categoria" texto={camposComErro.categoria} /></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-unidade">Unidade (opcional)</label><input id="produto-unidade" className="campo__entrada" value={formulario.unidade} onChange={(evento) => campo('unidade', evento.target.value)} maxLength={60} {...marcaDoCampo('unidade')} /><ErroDoCampo id="produto-erro-unidade" texto={camposComErro.unidade} /></div>
         </div>

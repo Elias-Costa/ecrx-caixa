@@ -6,11 +6,22 @@ import { gravarIdentidade, gravarToken, limparSessao } from '../sessao/armazenam
 import { SessaoContext } from '../sessao/contexto'
 import { tokenComExpiracao } from '../sessao/tokenDeTeste'
 import { confirmacaoAberta, responderConfirmacao } from './confirmacaoDeTeste'
+import { lerPelaCamera, temCamera } from './leitorDeCodigo'
 import { TelaDeClientes } from './TelaDeClientes'
 import { TelaDeProdutos } from './TelaDeProdutos'
 
+// A câmera é simulada e começa desligada; o teste dela a liga.
+vi.mock('./leitorDeCodigo', async (original) => ({
+  ...(await original<typeof import('./leitorDeCodigo')>()),
+  temCamera: vi.fn(), lerPelaCamera: vi.fn(), prepararAviso: vi.fn(), avisarLeitura: vi.fn(),
+}))
+
 // Só o administrador lê os inativos; o teste que precisa deles troca a resposta.
-beforeEach(() => { vi.spyOn(cadastro, 'produtosInativos').mockResolvedValue([]) })
+beforeEach(() => {
+  vi.spyOn(cadastro, 'produtosInativos').mockResolvedValue([])
+  vi.mocked(temCamera).mockReset().mockResolvedValue(false)
+  vi.mocked(lerPelaCamera).mockReset()
+})
 afterEach(() => { vi.restoreAllMocks(); limparSessao() })
 
 const produto = {
@@ -43,6 +54,26 @@ describe('cadastro na tela', () => {
       preco: 12.5, atributos: { gramas: 250 },
     })))
     expect(await screen.findByRole('status')).toHaveTextContent('Café salvo.')
+  })
+
+  it('a câmera põe o código lido no campo, no lugar do que estava, e ele só grava ao salvar', async () => {
+    vi.mocked(temCamera).mockResolvedValue(true)
+    vi.mocked(lerPelaCamera).mockResolvedValue('7891000311004')
+    vi.spyOn(cadastro, 'produtos').mockResolvedValue([produto])
+    const editar = vi.spyOn(cadastro, 'editarProduto').mockResolvedValue(undefined)
+    mostrarProdutos('ADMIN')
+
+    expect(await screen.findByText('Café')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    const codigo = screen.getByLabelText('Código (opcional)')
+    fireEvent.change(codigo, { target: { value: '123' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+
+    await waitFor(() => expect(codigo).toHaveValue('7891000311004'))
+    expect(codigo).toHaveFocus()
+    expect(editar).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(editar).toHaveBeenCalledWith('item-1', expect.objectContaining({ codigo: '7891000311004' })))
   })
 
   it('avisa o nome repetido de outro item ativo sem impedir o salvar, e não acusa o próprio item', async () => {

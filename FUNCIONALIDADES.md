@@ -218,7 +218,8 @@ contagem, com a diferença carregando o sinal; estoque mínimo por produto; e o 
 baixo como consulta, a lista dos produtos ativos no mínimo ou abaixo.
 
 A API e o PWA listam saldos e mínimos, registram a entrada, ajustam o saldo, definem o mínimo e
-mostram o alerta; a contagem na tela mostra a diferença antes de gravar.
+mostram o alerta; a contagem na tela mostra a diferença antes de gravar, e o produto se escolhe pela
+lista ou pelo código de barras lido pela câmera.
 
 A Conta com controle desligado recebe 409, e o operador, 403; o estoque continua no só leitura, e a
 baixa pela Venda nunca pergunta pelo plano.
@@ -410,7 +411,8 @@ ao caixa sem ele; no tablet e no celular, os itens do balcão ficam à vista e o
 
 Nas telas de produtos e clientes se listam, se filtram pelo nome, sem diferença de acento, e se
 alteram os cadastros, com pares livres de chave e valor para os atributos do produto; a lista de
-produtos mostra 50 itens por vez, com a contagem e um botão que mostra mais. Os valores em dinheiro
+produtos mostra 50 itens por vez, com a contagem e um botão que mostra mais. No aparelho com câmera,
+o código do produto também se lê por ela, no lugar de digitado. Os valores em dinheiro
 vão em campos de texto com o teclado decimal do aparelho, que aceitam vírgula e até duas casas. A
 sangria ou o suprimento começados no caixa e o item começado em Produtos voltam como ficaram quando
 a pessoa vai a outra tela e volta, até registrar, salvar, cancelar, recarregar ou sair, sem nada
@@ -439,7 +441,12 @@ fechá-los. O valor inicial nasce vazio e é obrigatório, mesmo quando é zero.
 No PDV, a busca aceita nome, sem diferença de acento nem de maiúscula, código e multiplicador de
 quantidade, e o Enter do leitor de código de barras lança o produto do código exato ou o resultado
 único; os resultados trazem primeiro esse produto e depois os nomes que começam pelo termo, com o
-preço pela unidade de venda, e param nos 20 primeiros, com o total quando há mais. A quantidade sai
+preço pela unidade de venda, e param nos 20 primeiros, com o total quando há mais. No aparelho com
+câmera, um código de barras desenhado dentro do campo da busca abre uma janela que lê um código por
+toque, das embalagens (EAN-13, EAN-8, UPC-A e UPC-E) ou de etiqueta (Code 128), avisa com um bipe e
+uma vibração onde o
+aparelho deixa, e o código lido entra como o Enter do leitor, com a quantidade e o desconto da tela,
+também sem rede; o QR Code não é lido, para um QR de Pix ou de site não virar busca. A quantidade sai
 com vírgula e unidade, como 0,35 kg, na comanda e no comprovante, que aparece logo abaixo da comanda
 concluída. Quando a quantidade não é 1, a linha do item na comanda mostra também o preço da unidade,
 no formato da busca. A comanda admite pagamento dividido, e o total, o que falta lançar e o botão de

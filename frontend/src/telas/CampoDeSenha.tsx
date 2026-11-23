@@ -60,8 +60,8 @@ export function CampoDeSenha({ rotulo, valor, aoMudar, autoComplete, name, minLe
 }
 
 /**
- * Desenhado aqui, sem biblioteca de ícones: é o único ícone dentro das telas. Riscado quando a senha
- * está à vista, porque o traço diz que o próximo toque esconde.
+ * Desenhado aqui, sem biblioteca de ícones: com o código de barras da câmera, são os dois ícones das
+ * telas. Riscado quando a senha está à vista, porque o traço diz que o próximo toque esconde.
  */
 function IconeDoOlho({ riscado }: { riscado: boolean }) {
   return <svg className="campo__olho-icone" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"

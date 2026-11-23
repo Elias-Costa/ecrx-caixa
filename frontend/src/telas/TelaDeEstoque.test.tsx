@@ -1,13 +1,24 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { ErroDaApi, SemConexao } from '../api/cliente'
 import { estoque, type EstoqueDoProduto } from '../api/estoque'
 import { SessaoContext } from '../sessao/contexto'
 import type { Identidade } from '../sessao/Identidade'
 import { ExigeAdmin } from '../shell/ExigeAdmin'
+import { lerPelaCamera, temCamera } from './leitorDeCodigo'
 import { TelaDeEstoque } from './TelaDeEstoque'
 
+// A câmera é simulada e começa desligada; o teste dela a liga.
+vi.mock('./leitorDeCodigo', async (original) => ({
+  ...(await original<typeof import('./leitorDeCodigo')>()),
+  temCamera: vi.fn(), lerPelaCamera: vi.fn(), prepararAviso: vi.fn(), avisarLeitura: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.mocked(temCamera).mockReset().mockResolvedValue(false)
+  vi.mocked(lerPelaCamera).mockReset()
+})
 afterEach(() => vi.restoreAllMocks())
 
 const arroz: EstoqueDoProduto = {
@@ -36,6 +47,27 @@ describe('estoque na tela', () => {
 
     expect(await screen.findByText('Início')).toBeInTheDocument()
     expect(produtos).not.toHaveBeenCalled()
+  })
+
+  it('a câmera escolhe o produto pelo código, e o código de nenhum produto da lista diz isso junto do seletor', async () => {
+    vi.mocked(temCamera).mockResolvedValue(true)
+    const feijao: EstoqueDoProduto = { ...arroz, id: 'feijao', nome: 'Feijão', codigo: '7891000311004' }
+    vi.spyOn(estoque, 'produtos').mockResolvedValue([feijao, arroz])
+    vi.spyOn(estoque, 'baixo').mockResolvedValue([])
+    render(<TelaDeEstoque />)
+
+    const seletor = await screen.findByLabelText('Produto')
+    expect(seletor).toHaveValue('arroz')
+    vi.mocked(lerPelaCamera).mockResolvedValueOnce('7899999999906')
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+    expect(await screen.findByText('Nenhum produto da lista tem o código 7899999999906.')).toHaveAttribute('role', 'alert')
+    expect(seletor).toHaveValue('arroz')
+
+    vi.mocked(lerPelaCamera).mockResolvedValueOnce('7891000311004')
+    fireEvent.click(screen.getByRole('button', { name: 'Ler pela câmera' }))
+    await waitFor(() => expect(seletor).toHaveValue('feijao'))
+    expect(seletor).toHaveFocus()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('mostra o alerta e lança a diferença calculada de uma contagem', async () => {
