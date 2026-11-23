@@ -1,8 +1,14 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { registrarResposta } from './api/conexao'
 import { apagarRascunhos } from './sessao/rascunhos'
+
+// Com a suíte inteira dividindo a máquina, o processo de um teste chega a ficar parado mais de um segundo
+// esperando a vez, e a espera padrão da Testing Library desistiria antes de a leitura do IndexedDB simulado
+// chegar à tela. Três segundos ficam abaixo dos 5 s do próprio teste: igual a eles, a espera presa
+// apareceria só como tempo esgotado, sem a linha em que parou.
+configure({ asyncUtilTimeout: 3000 })
 
 // O jsdom não abre diálogo modal. O mínimo de que as telas dependem: abrir marca o diálogo como
 // aberto, e fechar guarda a resposta e avisa pelo evento close, como o navegador. O resto do modal

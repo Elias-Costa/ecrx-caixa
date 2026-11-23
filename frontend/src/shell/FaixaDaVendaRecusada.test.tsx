@@ -28,9 +28,6 @@ const ana: Identidade = {
   nomeNegocio: 'Cafeteria Aurora', estoqueHabilitado: false,
 }
 const SESSAO = '00000000-0000-4000-8000-000000000021'
-// Abaixo dos 5 s do próprio teste: igual a eles, a espera presa apareceria só como tempo esgotado, sem a
-// linha em que parou.
-const espera = { timeout: 3000 }
 
 /** Uma venda em dinheiro que o servidor recusou: o início valeu, a parcela não, e a conclusão parou junto. */
 async function vendaRecusada(vendaId: string, valor: number, criadaEm = new Date()): Promise<GestoNaFila[]> {
@@ -77,7 +74,7 @@ function abrir(caminho: string, identidade: Identidade = ana) {
   )
 }
 
-const faixa = () => screen.findByText(/feita sem rede/, undefined, espera)
+const faixa = () => screen.findByText(/feita sem rede/)
 
 beforeEach(async () => {
   await deleteDB('ecrx-caixa-offline')
@@ -115,7 +112,7 @@ describe('a faixa da venda recusada', () => {
 
     abrir('/produtos')
 
-    expect(await within(screen.getByRole('banner')).findByText('1 em revisão', undefined, espera)).toBeInTheDocument()
+    expect(await within(screen.getByRole('banner')).findByText('1 em revisão')).toBeInTheDocument()
     expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument()
   })
 
@@ -124,11 +121,11 @@ describe('a faixa da venda recusada', () => {
     abrir('/caixa')
     await faixa()
     const cabecalho = within(screen.getByRole('banner'))
-    expect(await cabecalho.findByText('1 em revisão', undefined, espera)).toBeInTheDocument()
+    expect(await cabecalho.findByText('1 em revisão')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Conferir' }))
 
-    await waitFor(() => expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument(), espera)
+    await waitFor(() => expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument())
     expect(cabecalho.queryByText(/em revisão/)).not.toBeInTheDocument()
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Caixa' }))
     const depois = new Map((await listarGestos()).map((gesto) => [gesto.operacaoId, gesto]))
@@ -160,17 +157,17 @@ describe('a faixa da venda recusada', () => {
     screen.getByRole('heading', { name: 'Venda' }).focus()
 
     await waitFor(() => expect(screen.getByText(/feita sem rede/).textContent?.replaceAll('\u00a0', ' '))
-      .toContain('R$ 7,00'), espera)
+      .toContain('R$ 7,00'))
     expect(screen.queryByText(/Há mais/)).not.toBeInTheDocument()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Conferir' })), espera)
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Conferir' })))
   })
 
   it('sai quando a venda é conferida na tela Sincronização, e o número baixa junto', async () => {
     await vendaRecusada('00000000-0000-4000-8000-000000000011', 12.4)
     abrir('/sincronizacao')
 
-    fireEvent.click(await screen.findByRole('button', { name: /^Conferir Venda/ }, espera))
-    await waitFor(() => expect(within(screen.getByRole('banner')).queryByText(/em revisão/)).not.toBeInTheDocument(), espera)
+    fireEvent.click(await screen.findByRole('button', { name: /^Conferir Venda/ }))
+    await waitFor(() => expect(within(screen.getByRole('banner')).queryByText(/em revisão/)).not.toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('link', { name: 'Vender' }))
     expect(await screen.findByRole('heading', { name: 'Venda' })).toBeInTheDocument()
@@ -198,7 +195,7 @@ describe('a faixa da venda recusada', () => {
       expect(texto).not.toContain('avise o administrador')
       expect(screen.queryByRole('button', { name: 'Conferir' })).not.toBeInTheDocument()
       // O número é o da lista: a venda inteira conta um, como a linha dela lá.
-      expect(await within(screen.getByRole('banner')).findByText('1 em revisão', undefined, espera)).toBeInTheDocument()
+      expect(await within(screen.getByRole('banner')).findByText('1 em revisão')).toBeInTheDocument()
 
       vi.spyOn(contas, 'usuarios').mockResolvedValue([{ id: dona.usuarioId, nome: 'Ana', perfil: 'ADMIN', ativo: true }])
       const conferir = vi.spyOn(sincronizacao, 'conferir').mockResolvedValue(undefined)
@@ -208,9 +205,9 @@ describe('a faixa da venda recusada', () => {
 
       // Conferida na lista, a venda sai dela: o número baixa, e a faixa não volta ao balcão.
       vi.spyOn(sincronizacao, 'revisoes').mockResolvedValue({ pendentes: [], conferidas: [] })
-      fireEvent.click(await screen.findByRole('button', { name: /^Conferir Venda/ }, espera))
-      await waitFor(() => expect(conferir).toHaveBeenCalledTimes(2), espera)
-      await waitFor(() => expect(within(screen.getByRole('banner')).queryByText(/em revisão/)).not.toBeInTheDocument(), espera)
+      fireEvent.click(await screen.findByRole('button', { name: /^Conferir Venda/ }))
+      await waitFor(() => expect(conferir).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(within(screen.getByRole('banner')).queryByText(/em revisão/)).not.toBeInTheDocument())
       fireEvent.click(screen.getByRole('link', { name: 'Vender' }))
       expect(await screen.findByRole('heading', { name: 'Venda' })).toBeInTheDocument()
       expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument()
@@ -224,8 +221,8 @@ describe('a faixa da venda recusada', () => {
 
       abrir('/vender', dona)
 
-      await waitFor(() => expect(sincronizacao.revisoes).toHaveBeenCalled(), espera)
-      await waitFor(() => expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument(), espera)
+      await waitFor(() => expect(sincronizacao.revisoes).toHaveBeenCalled())
+      await waitFor(() => expect(screen.queryByText(/feita sem rede/)).not.toBeInTheDocument())
       expect(within(screen.getByRole('banner')).queryByText(/em revisão/)).not.toBeInTheDocument()
     })
 
@@ -236,7 +233,7 @@ describe('a faixa da venda recusada', () => {
       abrir('/vender', dona)
 
       expect(await faixa()).toBeInTheDocument()
-      expect(await within(screen.getByRole('banner')).findByText('1 em revisão', undefined, espera)).toBeInTheDocument()
+      expect(await within(screen.getByRole('banner')).findByText('1 em revisão')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Ir à Sincronização' })).toBeInTheDocument()
     })
   })
