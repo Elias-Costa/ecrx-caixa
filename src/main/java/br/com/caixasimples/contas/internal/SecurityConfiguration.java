@@ -35,10 +35,14 @@ class SecurityConfiguration {
      * estilo embutido, e o estilo que o React aplica pela propriedade de estilo do elemento passa
      * pelo CSSOM, que a política não barra. No desenvolvimento, quem serve a página é o servidor do
      * Vite, e esta política não chega a ela.
+     *
+     * <p>A única exceção é compilar WebAssembly, que o leitor de código de barras pela câmera usa, com
+     * o arquivo vindo da própria origem. Ela não libera avaliar texto como script, e um script
+     * injetado que já roda na origem não ganha com ela nada que não tivesse.
      */
     private static final String POLITICA_DE_CONTEUDO = String.join("; ",
             "default-src 'self'",
-            "script-src 'self'",
+            "script-src 'self' 'wasm-unsafe-eval'",
             "style-src 'self'",
             "img-src 'self'",
             "connect-src 'self'",
@@ -53,11 +57,12 @@ class SecurityConfiguration {
     /**
      * A área de transferência e o compartilhamento servem ao copia e cola do Pix, ao pedido de
      * plano e ao comprovante, e já valeriam para a própria origem sem esta linha. O que ela
-     * acrescenta é negar o que o aplicativo não usa: um script injetado não consegue pedir câmera,
-     * microfone ou localização.
+     * acrescenta é negar o que o aplicativo não usa: um script injetado não consegue pedir microfone
+     * ou localização. A câmera fica com a própria origem, para a leitura de código de barras; uma
+     * página de outro site, mesmo dentro de uma moldura, não a pediria.
      */
     private static final String POLITICA_DE_PERMISSOES = String.join(", ",
-            "camera=()",
+            "camera=(self)",
             "microphone=()",
             "geolocation=()",
             "payment=()",

@@ -12,7 +12,14 @@ import { SessaoContext } from '../sessao/contexto'
 import type { Identidade } from '../sessao/Identidade'
 import { SincronizacaoContext, type Sincronizacao } from '../shell/sincronizacao'
 import { confirmacaoAberta, responderConfirmacao } from './confirmacaoDeTeste'
+import { lerPelaCamera, temCamera } from './leitorDeCodigo'
 import { TelaDeVenda } from './TelaDeVenda'
+
+// A câmera é simulada e começa desligada; o teste dela a liga.
+vi.mock('./leitorDeCodigo', async (original) => ({
+  ...(await original<typeof import('./leitorDeCodigo')>()),
+  temCamera: vi.fn(), lerPelaCamera: vi.fn(), prepararAviso: vi.fn(), avisarLeitura: vi.fn(),
+}))
 
 afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear() })
 // A lista de clientes vem do servidor; sem a resposta simulada, a chamada falharia, e o aparelho
@@ -20,6 +27,8 @@ afterEach(() => { vi.restoreAllMocks(); sessionStorage.clear() })
 beforeEach(() => {
   vi.spyOn(vendas, 'conciliacoesPix').mockResolvedValue([])
   vi.spyOn(cadastro, 'clientes').mockResolvedValue([])
+  vi.mocked(temCamera).mockReset().mockResolvedValue(false)
+  vi.mocked(lerPelaCamera).mockReset()
 })
 
 const aberta = {
@@ -676,6 +685,46 @@ describe('PDV no tablet', () => {
     fireEvent.change(busca, { target: { value: '7891' } })
     fireEvent.keyDown(busca, { key: 'Enter' })
     await waitFor(() => expect(adicionar).toHaveBeenCalledTimes(2))
+  })
+
+  it('o código lido pela câmera entra pela fila com a quantidade da tela, e o texto da busca fica como estava', async () => {
+    vi.mocked(temCamera).mockResolvedValue(true)
+    vi.mocked(lerPelaCamera).mockResolvedValue('7891')
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([])
+    vi.spyOn(cadastro, 'buscarProdutos').mockResolvedValue([
+      { id: 'produto-1', tipo: 'PRODUTO', nome: 'Café', preco: 12.5, codigo: '7891',
+        categoria: null, unidade: 'un', atributos: {} },
+    ])
+    vi.spyOn(vendas, 'iniciar').mockResolvedValue({ id: 'venda-1' })
+    const adicionar = vi.spyOn(vendas, 'adicionarItem').mockResolvedValue({ id: 'item-1' })
+    vi.spyOn(vendas, 'consultar').mockResolvedValue(comanda)
+    mostrar()
+
+    const busca = await screen.findByLabelText('Produto por nome ou código')
+    fireEvent.change(busca, { target: { value: 'pão' } })
+    fireEvent.change(screen.getByLabelText('Quantidade'), { target: { value: '2' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+
+    await waitFor(() => expect(adicionar).toHaveBeenCalledWith('venda-1', 'produto-1', 2, 0, expect.any(String)))
+    expect(busca).toHaveValue('pão')
+    expect(screen.getByLabelText('Quantidade')).toHaveValue(1)
+    expect(busca).toHaveFocus()
+  })
+
+  it('a quantidade que o servidor recusaria é recusada também na leitura pela câmera', async () => {
+    vi.mocked(temCamera).mockResolvedValue(true)
+    vi.mocked(lerPelaCamera).mockResolvedValue('7891')
+    vi.spyOn(caixa, 'abertaDoOperadorAtual').mockResolvedValue(aberta)
+    vi.spyOn(vendas, 'daSessao').mockResolvedValue([])
+    const adicionar = vi.spyOn(vendas, 'adicionarItem').mockResolvedValue({ id: 'item-1' })
+    mostrar()
+
+    fireEvent.change(await screen.findByLabelText('Quantidade'), { target: { value: '0' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+
+    expect(await screen.findByText('Informe uma quantidade maior que zero.')).toBeInTheDocument()
+    expect(adicionar).not.toHaveBeenCalled()
   })
 
   it('o desconto do item nasce vazio, vale zero assim e volta vazio depois de lançar', async () => {

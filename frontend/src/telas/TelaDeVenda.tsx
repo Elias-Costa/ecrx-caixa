@@ -22,6 +22,7 @@ import { useSincronizacao } from '../shell/sincronizacao'
 import { useCelular } from '../shell/useCelular'
 import { useConexao } from '../shell/useConexao'
 import { useSessao } from '../sessao/useSessao'
+import { BotaoDaCamera } from './BotaoDaCamera'
 import { CampoDeDinheiro } from './CampoDeDinheiro'
 import { erroDeCadastro } from './erroDeCadastro'
 import { filtrarPorNome, naOrdemDaBusca } from './filtroPorNome'
@@ -949,13 +950,7 @@ export function TelaDeVenda() {
   function lerPeloEnter() {
     const termoLido = busca.trim()
     if (!termoLido || !sessao) return
-    if (descontoDigitado(descontoItem) === null) {
-      falhar('busca', 'Informe o desconto do item com até duas casas decimais.')
-      return
-    }
-    // A quantidade que o servidor recusaria é recusada antes, com o mesmo texto: com a comanda concluída ou vazia, a
-    // ida abriria antes da recusa uma venda nova, que ficaria aberta e vazia no caixa.
-    const recusa = recusaDaQuantidade(numero(quantidade))
+    const recusa = recusaDoCodigo()
     if (recusa) {
       falhar('busca', recusa)
       return
@@ -965,11 +960,40 @@ export function TelaDeVenda() {
       produto = escolhidoPeloEnter(resultados, termoLido)
       if (!produto) return
     }
+    guardarCodigo(termoLido, produto)
+    setBusca(''); setResultados([]); setBuscado('')
+  }
+
+  /**
+   * O código lido pela câmera entra como o Enter do leitor USB, pela mesma fila e com as mesmas recusas, e vai sem
+   * produto, buscado na vez dele. O texto que estava na busca fica como estava: não foi ele que se leu.
+   */
+  function lerDaCamera(codigo: string) {
+    const termoLido = codigo.trim()
+    if (termoLido && sessao) {
+      const recusa = recusaDoCodigo()
+      if (recusa) falhar('busca', recusa)
+      else guardarCodigo(termoLido)
+    }
+    buscaRef.current?.focus()
+  }
+
+  /**
+   * A quantidade que o servidor recusaria é recusada antes, com o mesmo texto: com a comanda concluída ou vazia, a
+   * ida abriria antes da recusa uma venda nova, que ficaria aberta e vazia no caixa.
+   */
+  function recusaDoCodigo(): string | undefined {
+    if (descontoDigitado(descontoItem) === null) return 'Informe o desconto do item com até duas casas decimais.'
+    return recusaDaQuantidade(numero(quantidade))
+  }
+
+  /** A quantidade e o desconto da tela vão com o código e voltam ao padrão para a leitura seguinte. */
+  function guardarCodigo(termo: string, produto?: Produto) {
     // A primeira leitura com a comanda livre começa sem o aviso da anterior; a que chega com outra em curso deixa à
     // vista o aviso do código que ficou de fora.
     if (!comandaOcupada) setErro(undefined)
-    guardarLeitura({ termo: termoLido, quantidade, descontoItem, produto })
-    setBusca(''); setResultados([]); setBuscado(''); setQuantidade('1'); setDescontoItem('')
+    guardarLeitura({ termo, quantidade, descontoItem, produto })
+    setQuantidade('1'); setDescontoItem('')
   }
 
   function mudarBusca(texto: string) {
@@ -1035,6 +1059,8 @@ export function TelaDeVenda() {
                 onChange={(evento) => setQuantidade(evento.target.value)} />
             </label>
             <p className="pdv__ajuda">Também aceita 3* no início da busca para lançar três unidades.</p>
+            {/* Depois da ajuda: no celular, a quantidade e a ajuda dividem a linha, e o botão vem embaixo das duas. */}
+            <div className="pdv__camera"><BotaoDaCamera aoLer={lerDaCamera} /></div>
           </div>
           {identidade?.perfil === 'ADMIN' &&
             <CampoDeDinheiro rotulo="Desconto deste item" placeholder="0,00" valor={descontoItem}

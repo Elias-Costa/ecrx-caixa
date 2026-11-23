@@ -210,6 +210,19 @@ textarea:disabled {
   width: 100%;
 }
 
+/* Campo com um botão ao lado, como o Ler pela câmera do código: na coluna estreita, o botão desce
+   para a linha de baixo em vez de espremer o campo. */
+.campo__com-botao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.campo__com-botao .campo__entrada {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
 /* A borda do campo que o servidor recusou acompanha a mensagem embaixo dele, que diz o porquê. */
 [aria-invalid='true'] {
   border-color: var(--cor-erro);
@@ -378,6 +391,51 @@ textarea:disabled {
 
 .confirmacao__acoes .botao {
   flex: 1 1 160px;
+}
+
+/* Câmera: a janela da leitura de código de barras, com o mesmo fundo da confirmação. O vídeo ocupa a
+   largura da janela e não passa de metade da altura da tela, para o Fechar ficar à vista no celular
+   deitado. */
+.camera {
+  width: min(calc(100% - 2 * var(--espaco)), 560px);
+  max-width: none;
+  padding: calc(var(--espaco) * 1.5);
+  border: 1px solid var(--cor-borda-controle);
+  border-radius: calc(var(--raio) * 1.5);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+}
+
+.camera::backdrop {
+  background: rgba(8, 13, 42, 0.8);
+}
+
+.camera__titulo {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+}
+
+.camera__video {
+  display: block;
+  width: 100%;
+  max-height: 50vh;
+  object-fit: cover;
+  border-radius: var(--raio);
+  background: var(--cor-fundo);
+}
+
+.camera__estado {
+  margin: 12px 0 0;
+}
+
+.camera__acoes {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--espaco);
+}
+
+.camera__acoes .botao {
+  flex: 0 1 200px;
 }
 
 /* Login */
@@ -967,6 +1025,8 @@ main.cadastro {
 .estoque .tabela { max-width: 44rem; }
 .estoque .tabela th, .estoque .tabela td { vertical-align: middle; }
 .estoque__selecao { display: grid; gap: 8px; max-width: 420px; }
+.estoque__camera { margin-top: 8px; }
+.estoque__camera:empty { display: none; }
 .estoque__formularios { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--espaco); }
 .estoque__formularios form, .estoque__formularios label { display: grid; gap: 8px; align-content: start; }
 .estoque__formularios form { padding: var(--espaco); background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); }
@@ -985,6 +1045,9 @@ main.cadastro {
 .pdv__busca label { min-width: 0; }
 .pdv__busca input { width: 100%; }
 .pdv__busca .pdv__ajuda { grid-column: 1 / -1; }
+/* Sem câmera, o botão não existe, e a linha vazia não deixa espaço. */
+.pdv__camera { grid-column: 1 / -1; margin-bottom: 12px; }
+.pdv__camera:empty { display: none; }
 /* Abaixo de 1024px o painel da busca é estreito, metade do tablet ou o celular inteiro: lado a lado
    com a quantidade, a busca ficava com 184px, cortava o texto de dentro e quebrava o rótulo em duas
    linhas. A busca ocupa a linha, e a quantidade desce com a ajuda do 3* ao lado. */

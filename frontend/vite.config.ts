@@ -41,8 +41,9 @@ export default defineConfig({
         // Só o shell entra no cache do service worker: a página, os scripts, os estilos, os
         // ícones e o manifest. Dado de negócio nunca é guardado pelo service worker; quando a
         // operação offline chegar, ela terá um armazenamento próprio, com fila e estados
-        // explícitos, e não um cache de respostas HTTP.
-        globPatterns: ['**/*.{js,css,html,svg,png,json}'],
+        // explícitos, e não um cache de respostas HTTP. O leitor de código de barras em
+        // WebAssembly também entra, para a câmera ler sem rede como a busca do balcão.
+        globPatterns: ['**/*.{js,css,html,svg,png,json,wasm}'],
         // Rota do cliente sem rede recebe o shell; /api nunca, porque a resposta de um erro de
         // rede na API tem de chegar ao código que chamou, não ser trocada por HTML.
         navigateFallback: '/index.html',

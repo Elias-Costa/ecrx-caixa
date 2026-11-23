@@ -111,9 +111,9 @@ As capturas são de uma conta de demonstração, com dados fictícios.
 
 ## O que o sistema faz
 
-- **Venda no balcão.** Busca por nome, código ou leitor de código de barras, comanda com desconto
-  dado pelo administrador, pagamento dividido entre dinheiro com troco, cartão com o NSU da
-  maquininha, Pix e fiado, e comprovante não fiscal para imprimir ou compartilhar.
+- **Venda no balcão.** Busca por nome, código, leitor de código de barras ou a câmera do aparelho,
+  comanda com desconto dado pelo administrador, pagamento dividido entre dinheiro com troco, cartão
+  com o NSU da maquininha, Pix e fiado, e comprovante não fiscal para imprimir ou compartilhar.
 - **Pix.** O Pix lançado à mão mostra ao cliente um QR estático montado no próprio aparelho. O Pix
   integrado cria a cobrança no provedor, Efí ou Inter, e só quita a parcela depois de reconsultar o
   pagamento (RF25).
@@ -382,7 +382,7 @@ O desenho completo está em [ARQUITETURA.md](ARQUITETURA.md#implantação), e o 
 | Build | Maven, via wrapper versionado, que confere o checksum da distribuição |
 | E-mail | Amazon SES no Brasil, pela API do SDK da AWS, por HTTPS |
 | Testes | JUnit 5, AssertJ e Testcontainers; Vitest no front-end |
-| Frontend | PWA em React 19, Vite 8 e TypeScript, com React Router, service worker gerado por Workbox e IndexedDB via `idb`; empacotado no jar pelo Maven, com o Node fixado no `pom.xml` |
+| Frontend | PWA em React 19, Vite 8 e TypeScript, com React Router, service worker gerado por Workbox, IndexedDB via `idb` e leitura de código de barras pela câmera com o ZXing em WebAssembly (`barcode-detector`); empacotado no jar pelo Maven, com o Node fixado no `pom.xml` |
 | Infraestrutura | Docker Compose numa VPS com AlmaLinux 9 e o proxy Caddy; GitHub Actions com Trivy e Dependabot; cópia cifrada com age, enviada pelo rclone ao S3 da AWS no Brasil |
 
 A escolha de versão não é acidental. Spring Boot 3.x perdeu o suporte OSS em junho de 2026, então um
