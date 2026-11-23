@@ -132,11 +132,17 @@ export function prepararAviso() {
 }
 
 /**
+ * A vibração da leitura feita, um pulso curto como o do leitor de balcão. Com a economia de bateria ligada, o Android
+ * não vibra pelo navegador, e só o bipe avisa.
+ */
+const VIBRACAO_DA_LEITURA_MS = 100
+
+/**
  * O bipe do leitor de balcão, que se ouve sem olhar para a tela, e uma vibração curta onde o navegador deixa vibrar;
  * o iPhone não deixa.
  */
 export function avisarLeitura() {
-  if ('vibrate' in navigator) navigator.vibrate(80)
+  if ('vibrate' in navigator) navigator.vibrate(VIBRACAO_DA_LEITURA_MS)
   if (!somDoAviso) return
   const oscilador = somDoAviso.createOscillator()
   const volume = somDoAviso.createGain()

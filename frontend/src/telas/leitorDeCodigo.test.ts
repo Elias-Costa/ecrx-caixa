@@ -1,13 +1,16 @@
 import { ZXING_WASM_VERSION as versaoDaBiblioteca } from 'barcode-detector/ponyfill'
 import { ZXING_WASM_VERSION as versaoDoLeitorServido } from 'zxing-wasm/reader'
-import { afterEach, describe, expect, it } from 'vitest'
-import { FORMATOS, temCamera } from './leitorDeCodigo'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { avisarLeitura, FORMATOS, temCamera } from './leitorDeCodigo'
 
 function comAparelhos(mediaDevices: unknown) {
   Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices, configurable: true })
 }
 
-afterEach(() => { Reflect.deleteProperty(navigator, 'mediaDevices') })
+afterEach(() => {
+  Reflect.deleteProperty(navigator, 'mediaDevices')
+  Reflect.deleteProperty(navigator, 'vibrate')
+})
 
 describe('leitor de código pela câmera', () => {
   it('lê só os formatos das embalagens e o Code 128 das etiquetas, sem o QR Code', () => {
@@ -31,6 +34,19 @@ describe('leitor de código pela câmera', () => {
 
     comAparelhos({ enumerateDevices: async () => [{ kind: 'audioinput' }, { kind: 'videoinput' }] })
     await expect(temCamera()).resolves.toBe(true)
+  })
+
+  it('a leitura feita vibra por 100 ms onde o navegador deixa vibrar', () => {
+    const vibrar = vi.fn(() => true)
+    Object.defineProperty(navigator, 'vibrate', { value: vibrar, configurable: true })
+
+    avisarLeitura()
+
+    expect(vibrar).toHaveBeenCalledWith(100)
+  })
+
+  it('sem vibração no navegador, o aviso da leitura não falha', () => {
+    expect(() => avisarLeitura()).not.toThrow()
   })
 
   it('a lista recusada pelo navegador vale como sem câmera', async () => {
