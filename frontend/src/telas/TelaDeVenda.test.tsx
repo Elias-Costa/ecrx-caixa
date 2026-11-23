@@ -249,13 +249,18 @@ describe('PDV no tablet', () => {
       mostrar('OPERADOR', { pixIntegrado: true })
       fireEvent.click(await screen.findByRole('button', { name: /Aberta.*retomar ou cancelar/ }))
       expect(await screen.findByText(/Pix aguardando confirmação/)).toBeInTheDocument()
-      const consultaDoPix = intervalos.mock.calls.filter(([, intervalo]) => intervalo === 5000).at(-1)?.[0]
-      expect(consultaDoPix).toBeTypeOf('function')
+      // O findBy volta assim que o texto chega à tela, e o efeito do mesmo desenho, que liga a consulta do
+      // Pix, às vezes só roda na volta seguinte do laço de eventos: lido sem esperar, o intervalo ainda não existe.
+      const consultaDoPix = await waitFor(() => {
+        const consulta = intervalos.mock.calls.filter(([, intervalo]) => intervalo === 5000).at(-1)?.[0]
+        expect(consulta).toBeTypeOf('function')
+        return consulta as () => void
+      })
       // O operador estava noutro controle quando o banco confirmou.
       screen.getByRole('button', { name: 'Copiar' }).focus()
 
       paga = true
-      act(() => (consultaDoPix as () => void)())
+      act(() => consultaDoPix())
 
       expect(await screen.findByLabelText('Comprovante não fiscal')).toBeInTheDocument()
       // Paga, a parcela não mostra mais a cobrança disponível nem o prazo.
