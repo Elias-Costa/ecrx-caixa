@@ -240,12 +240,17 @@ export function TelaDeEstoque() {
       <section className="relatorios__cartao" ref={formulariosRef}>
         <h3>Produtos</h3>
         {produtos.length === 0 ? <p>Nenhum produto ativo. Cadastre um produto para controlar o estoque.</p> : <>
-          <label className="estoque__selecao">Produto
-            <select ref={seletorRef} className="campo__entrada" value={produtoId} onChange={(evento) => trocarProduto(evento.target.value)}>
-              {produtos.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.codigo ? ` · ${item.codigo}` : ''}</option>)}
-            </select>
-          </label>
-          <div className="estoque__camera"><BotaoDaCamera aoLer={lerCodigoDaCamera} /></div>
+          {/* O botão da câmera fica ao lado da lista e fora do rótulo, para o nome da lista continuar sendo só o
+              rótulo. */}
+          <div className="estoque__selecao">
+            <label htmlFor="estoque-produto">Produto</label>
+            <div className="campo__com-botao">
+              <select ref={seletorRef} id="estoque-produto" className="campo__entrada" value={produtoId} onChange={(evento) => trocarProduto(evento.target.value)}>
+                {produtos.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.codigo ? ` · ${item.codigo}` : ''}</option>)}
+              </select>
+              <BotaoDaCamera aoLer={lerCodigoDaCamera} />
+            </div>
+          </div>
           <Mensagem tipo="erro" texto={codigoSemProduto} />
           {/* O saldo negativo leva a palavra, e a cor do alerta só a reforça. */}
           {produto && <p>Saldo atual: <strong className={produto.estoqueAtual < 0 ? 'estoque__negativo' : undefined}>

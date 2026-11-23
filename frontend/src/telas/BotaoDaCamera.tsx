@@ -11,6 +11,10 @@ type Props = {
  * O botão que lê um código de barras pela câmera, uma leitura por toque: a câmera aberta leria de novo o mesmo
  * código parado na frente dela. Só aparece onde o navegador diz que há câmera, para o computador do balcão, que usa
  * o leitor USB, não ganhar um botão que não serve.
+ *
+ * É um código de barras desenhado, colado no campo que ele preenche: dentro do campo de texto, à direita, como o
+ * olho da senha, e ao lado da lista de produtos, que já tem a seta à direita. Sem texto à vista, o nome do botão
+ * fica no aria-label.
  */
 export function BotaoDaCamera({ aoLer, desligado }: Props) {
   const [comCamera, setComCamera] = useState(false)
@@ -29,12 +33,28 @@ export function BotaoDaCamera({ aoLer, desligado }: Props) {
 
   if (!comCamera) return null
   return <>
-    <button type="button" className="botao botao--secundario" disabled={desligado}
+    <button type="button" className="campo__camera" aria-label="Ler pela câmera" disabled={desligado}
       onClick={() => { prepararAviso(); setAberta(true) }}>
-      Ler pela câmera
+      <IconeDoCodigo />
     </button>
     {aberta && <JanelaDaCamera aoFechar={fechar} />}
   </>
+}
+
+/** Desenhado aqui, sem biblioteca de ícones, como o olho da senha: as barras de um código entre os cantos de um visor. */
+function IconeDoCodigo() {
+  return <svg className="campo__camera-icone" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"
+    focusable="false" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round">
+    <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />
+    <g fill="currentColor" stroke="none">
+      <rect x="6.5" y="7.5" width="2" height="9" />
+      <rect x="9.5" y="7.5" width="1" height="9" />
+      <rect x="11.5" y="7.5" width="2" height="9" />
+      <rect x="14.5" y="7.5" width="1" height="9" />
+      <rect x="16.5" y="7.5" width="1" height="9" />
+    </g>
+  </svg>
 }
 
 /**

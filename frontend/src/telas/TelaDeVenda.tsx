@@ -1045,22 +1045,27 @@ export function TelaDeVenda() {
               teclado virtual; o leitor de tela continua achando o painel por ele. */}
           <h3 className="pdv__titulo-da-busca">Busca de produtos</h3>
           <div className="pdv__busca">
-            <label>Produto por nome ou código
-              <input ref={buscaRef} autoFocus value={busca} onChange={(evento) => mudarBusca(evento.target.value)}
-                onKeyDown={(evento) => {
-                  if (evento.key !== 'Enter') return
-                  evento.preventDefault()
-                  lerPeloEnter()
-                }}
-                placeholder="Digite ou passe o código" />
-            </label>
+            {/* O rótulo não envolve o campo: o botão da câmera fica colado no campo e fora do rótulo, para o nome
+                do campo continuar sendo só o rótulo. */}
+            <div className="pdv__campo-da-busca">
+              <label htmlFor="pdv-busca">Produto por nome ou código</label>
+              <div className="campo__leitura">
+                <input ref={buscaRef} id="pdv-busca" autoFocus value={busca}
+                  onChange={(evento) => mudarBusca(evento.target.value)}
+                  onKeyDown={(evento) => {
+                    if (evento.key !== 'Enter') return
+                    evento.preventDefault()
+                    lerPeloEnter()
+                  }}
+                  placeholder="Digite ou passe o código" />
+                <BotaoDaCamera aoLer={lerDaCamera} />
+              </div>
+            </div>
             <label>Quantidade
               <input type="number" min="0.001" step="0.001" value={quantidade}
                 onChange={(evento) => setQuantidade(evento.target.value)} />
             </label>
             <p className="pdv__ajuda">Também aceita 3* no início da busca para lançar três unidades.</p>
-            {/* Depois da ajuda: no celular, a quantidade e a ajuda dividem a linha, e o botão vem embaixo das duas. */}
-            <div className="pdv__camera"><BotaoDaCamera aoLer={lerDaCamera} /></div>
           </div>
           {identidade?.perfil === 'ADMIN' &&
             <CampoDeDinheiro rotulo="Desconto deste item" placeholder="0,00" valor={descontoItem}

@@ -442,8 +442,9 @@ No PDV, a busca aceita nome, sem diferença de acento nem de maiúscula, código
 quantidade, e o Enter do leitor de código de barras lança o produto do código exato ou o resultado
 único; os resultados trazem primeiro esse produto e depois os nomes que começam pelo termo, com o
 preço pela unidade de venda, e param nos 20 primeiros, com o total quando há mais. No aparelho com
-câmera, o botão Ler pela câmera abre uma janela que lê um código de barras por toque, das embalagens
-(EAN-13, EAN-8, UPC-A e UPC-E) ou de etiqueta (Code 128), avisa com um bipe e uma vibração onde o
+câmera, um código de barras desenhado dentro do campo da busca abre uma janela que lê um código por
+toque, das embalagens (EAN-13, EAN-8, UPC-A e UPC-E) ou de etiqueta (Code 128), avisa com um bipe e
+uma vibração onde o
 aparelho deixa, e o código lido entra como o Enter do leitor, com a quantidade e o desconto da tela,
 também sem rede; o QR Code não é lido, para um QR de Pix ou de site não virar busca. A quantidade sai
 com vírgula e unidade, como 0,35 kg, na comanda e no comprovante, que aparece logo abaixo da comanda

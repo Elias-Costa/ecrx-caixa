@@ -210,16 +210,15 @@ textarea:disabled {
   width: 100%;
 }
 
-/* Campo com um botão ao lado, como o Ler pela câmera do código: na coluna estreita, o botão desce
-   para a linha de baixo em vez de espremer o campo. */
+/* Lista com um botão quadrado ao lado, como a câmera junto da lista de produtos do estoque: dentro
+   da lista, o botão cairia em cima da seta dela. */
 .campo__com-botao {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
 .campo__com-botao .campo__entrada {
-  flex: 1 1 160px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -249,14 +248,17 @@ textarea:disabled {
   margin-top: 6px;
 }
 
-/* O olho fica dentro do campo, à direita, e o texto digitado para antes dele. O ícone, em texto
-   secundário, tem 7,56:1 sobre o fundo do campo; objeto gráfico pede 3:1. O anel do foco entra no
-   campo, para não sair da borda dele. */
-.campo__senha {
+/* O olho da senha e o código de barras da câmera ficam dentro do campo, à direita, e o texto digitado
+   para antes deles. O ícone, em texto secundário, tem 7,56:1 sobre o fundo do campo; objeto gráfico
+   pede 3:1. O anel do foco entra no campo, para não sair da borda dele. */
+.campo__senha,
+.campo__leitura {
   position: relative;
 }
 
-.campo__senha .campo__entrada {
+/* A câmera só existe no aparelho que tem uma: sem ela, o campo não guarda o espaço do ícone. */
+.campo__senha .campo__entrada,
+.campo__leitura:has(> .campo__camera) > input {
   padding-right: var(--toque);
 }
 
@@ -265,7 +267,8 @@ textarea:disabled {
   display: none;
 }
 
-.campo__olho {
+.campo__olho,
+.campo__camera {
   position: absolute;
   top: 0;
   right: 0;
@@ -282,12 +285,38 @@ textarea:disabled {
 }
 
 .campo__olho:hover,
-.campo__olho[aria-pressed='true'] {
+.campo__olho[aria-pressed='true'],
+.campo__camera:hover {
   color: var(--cor-texto);
 }
 
-.campo__olho:focus-visible {
+.campo__olho:focus-visible,
+.campo__camera:focus-visible {
   outline-offset: -4px;
+}
+
+.campo__camera:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Ao lado da lista, a câmera tem a borda dos campos, para não parecer solta no cartão, e a altura da
+   lista. */
+.campo__com-botao .campo__camera {
+  position: static;
+  flex: none;
+  height: auto;
+  min-height: var(--toque);
+  border: 1px solid var(--cor-borda-controle);
+  color: var(--cor-texto);
+}
+
+.campo__com-botao .campo__camera:hover {
+  background: var(--cor-superficie-realce);
+}
+
+.campo__com-botao .campo__camera:focus-visible {
+  outline-offset: 2px;
 }
 
 /* Campo de dinheiro: o R$ fica dentro da caixa, à esquerda, e o toque nele cai no próprio campo. */
@@ -1025,8 +1054,6 @@ main.cadastro {
 .estoque .tabela { max-width: 44rem; }
 .estoque .tabela th, .estoque .tabela td { vertical-align: middle; }
 .estoque__selecao { display: grid; gap: 8px; max-width: 420px; }
-.estoque__camera { margin-top: 8px; }
-.estoque__camera:empty { display: none; }
 .estoque__formularios { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--espaco); }
 .estoque__formularios form, .estoque__formularios label { display: grid; gap: 8px; align-content: start; }
 .estoque__formularios form { padding: var(--espaco); background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); }
@@ -1045,15 +1072,16 @@ main.cadastro {
 .pdv__busca label { min-width: 0; }
 .pdv__busca input { width: 100%; }
 .pdv__busca .pdv__ajuda { grid-column: 1 / -1; }
-/* Sem câmera, o botão não existe, e a linha vazia não deixa espaço. */
-.pdv__camera { grid-column: 1 / -1; margin-bottom: 12px; }
-.pdv__camera:empty { display: none; }
+/* O rótulo da busca não envolve o campo, por causa do botão da câmera: o bloco faz o papel do rótulo
+   dos outros campos do painel. */
+.pdv__campo-da-busca { display: grid; gap: 6px; min-width: 0; margin-bottom: 12px; }
+.pdv__campo-da-busca label { margin-bottom: 0; }
 /* Abaixo de 1024px o painel da busca é estreito, metade do tablet ou o celular inteiro: lado a lado
    com a quantidade, a busca ficava com 184px, cortava o texto de dentro e quebrava o rótulo em duas
    linhas. A busca ocupa a linha, e a quantidade desce com a ajuda do 3* ao lado. */
 @media (max-width: 1023px) {
   .pdv__busca { grid-template-columns: 130px minmax(0, 1fr); }
-  .pdv__busca > label:first-child { grid-column: 1 / -1; }
+  .pdv__busca > .pdv__campo-da-busca { grid-column: 1 / -1; }
   .pdv__busca .pdv__ajuda { grid-column: auto; align-self: center; margin-bottom: 12px; }
 }
 /* Com busca e comanda lado a lado, a busca acompanha a rolagem da comanda longa, em vez de deixar a
