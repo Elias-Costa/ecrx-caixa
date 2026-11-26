@@ -11,6 +11,13 @@ export const FORMATOS: BarcodeFormat[] = ['ean_13', 'ean_8', 'upc_a', 'upc_e', '
 /** O intervalo entre um quadro conferido e o seguinte: rápido para a pessoa, sem ocupar o aparelho o tempo todo. */
 const INTERVALO_ENTRE_QUADROS_MS = 150
 
+/**
+ * A imagem pedida à câmera. Sem tamanho no pedido, o navegador entrega 640 por 480, e a câmera de notebook, de foco
+ * fixo e lente aberta, só vê o código nítido de longe, onde cada barra fina fica com menos de um pixel. Ideal, e não
+ * exigido: a câmera que não chega a isso entrega a maior que tiver, e nenhuma deixa de abrir.
+ */
+const IMAGEM_DA_CAMERA = { width: { ideal: 1920 }, height: { ideal: 1080 } }
+
 export type MotivoDaFalha = 'permissao' | 'sem-camera' | 'ocupada' | 'biblioteca' | 'outra'
 
 const FRASE_DA_FALHA: Record<MotivoDaFalha, string> = {
@@ -96,7 +103,10 @@ export async function lerPelaCamera(video: HTMLVideoElement, sinal: AbortSignal)
   let fluxo: MediaStream
   try {
     // A traseira é a que aponta para o produto; no computador, que só tem a da frente, vale a que houver.
-    fluxo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+    fluxo = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, ...IMAGEM_DA_CAMERA },
+      audio: false,
+    })
   } catch (falha) {
     throw falhaAoAbrir(falha)
   }
