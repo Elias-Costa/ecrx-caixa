@@ -1,7 +1,14 @@
 import { ZXING_WASM_VERSION as versaoDaBiblioteca } from 'barcode-detector/ponyfill'
 import { ZXING_WASM_VERSION as versaoDoLeitorServido } from 'zxing-wasm/reader'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisarLeitura, FORMATOS, temCamera } from './leitorDeCodigo'
+import { avisarLeitura, FORMATOS, lerPelaCamera, temCamera } from './leitorDeCodigo'
+
+// O leitor em WebAssembly não roda no jsdom: a biblioteca fica com a versão de verdade e um detector que não lê nada.
+vi.mock('barcode-detector/ponyfill', async (original) => ({
+  ...await original<typeof import('barcode-detector/ponyfill')>(),
+  prepareZXingModule: vi.fn(async () => undefined),
+  BarcodeDetector: class { detect = async () => [] },
+}))
 
 function comAparelhos(mediaDevices: unknown) {
   Object.defineProperty(navigator, 'mediaDevices', { value: mediaDevices, configurable: true })
@@ -34,6 +41,20 @@ describe('leitor de código pela câmera', () => {
 
     comAparelhos({ enumerateDevices: async () => [{ kind: 'audioinput' }, { kind: 'videoinput' }] })
     await expect(temCamera()).resolves.toBe(true)
+  })
+
+  // Sem tamanho no pedido, o navegador entrega 640 por 480, e a câmera de notebook não lê o código.
+  it('pede à câmera a imagem de 1920 por 1080, a traseira onde houver', async () => {
+    const pedir = vi.fn(async () => { throw new DOMException('negado', 'NotAllowedError') })
+    comAparelhos({ getUserMedia: pedir })
+
+    await expect(lerPelaCamera(document.createElement('video'), new AbortController().signal))
+      .rejects.toMatchObject({ motivo: 'permissao' })
+
+    expect(pedir).toHaveBeenCalledWith({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    })
   })
 
   it('a leitura feita vibra por 100 ms onde o navegador deixa vibrar', () => {
