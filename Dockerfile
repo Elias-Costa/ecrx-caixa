@@ -8,7 +8,7 @@
 # publica, e reconstruir o mesmo commit dá a mesma base. A troca vem do Dependabot, uma vez por mês.
 #
 # Imagem com glibc de propósito: o empacotamento baixa o Node oficial, que não roda sobre musl.
-FROM eclipse-temurin:21-jdk-noble@sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87 AS build
+FROM eclipse-temurin:21-jdk-noble@sha256:dc333cdac241f073941f043792f2a2f9b790bfe7cd98ef2843c08880986708de AS build
 WORKDIR /build
 
 # O wrapper confere o checksum do zip do Maven, o mesmo na máquina e no CI. Sem o unzip, ele baixaria
@@ -33,12 +33,12 @@ RUN sh mvnw -B -ntp package -Dmaven.test.skip=true
 # Separa o jar em camadas, das que mudam menos para as que mudam mais. Uma versão nova que só
 # altera o código da aplicação reenvia só a última camada, e o layout extraído sobe mais rápido
 # que o jar aninhado.
-FROM eclipse-temurin:21-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474 AS camadas
+FROM eclipse-temurin:21-jre-alpine@sha256:5d7689f47d670aca766b9503a70bccc2d73b4eb9221ae8f714ae958313c4ce70 AS camadas
 WORKDIR /camadas
 COPY --from=build /build/target/caixa-simples-*.jar aplicacao.jar
 RUN java -Djarmode=tools -jar aplicacao.jar extract --layers --destination extraido
 
-FROM eclipse-temurin:21-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474
+FROM eclipse-temurin:21-jre-alpine@sha256:5d7689f47d670aca766b9503a70bccc2d73b4eb9221ae8f714ae958313c4ce70
 # Liga a imagem publicada a este repositório no registro, e é por ele que o deploy acha as versões
 # antigas para apagar.
 LABEL org.opencontainers.image.source=https://github.com/Elias-Costa/ecrx-caixa
@@ -63,12 +63,7 @@ EXPOSE 8080
 # O coletor serial é o que a JVM escolhe quando enxerga uma CPU só, e fica explícito porque a
 # medição foi feita com ele: outro coletor gastaria mais memória fora do heap.
 # Sem memória, o processo termina em vez de seguir degradado, e a hospedagem sobe outro.
-# A versão acelerada do Base64, que a JVM usa em CPU x86-64 com AVX-512 VBMI, fica desligada: no Java
-# 21 desta base, uma entrada Base64 malformada a faz escrever além do fim do vetor de saída
-# (CVE-2026-114938), e o nome de arquivo de um corpo multipart, que o Spring decodifica antes de saber
-# a rota e antes do login, leva a entrada até ela. A versão comum é mais lenta, o que não pesa numa
-# aplicação que quase não decodifica Base64. A opção sai quando a base passar a 21.0.13.1 ou mais nova.
-ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError -XX:-UseBASE64Intrinsics"
+ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError"
 
 # Comando, e não ponto de entrada, para que uma execução avulsa da mesma imagem, como a que cria uma
 # Conta, troque o comando inteiro. O ponto de entrada da imagem base só trataria certificados que

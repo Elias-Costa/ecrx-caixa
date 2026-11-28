@@ -122,10 +122,8 @@ resultado de uma carga deixados aqui não chegam ao build.
 
 A JVM foi medida sob a carga de correção com meia CPU, no limite de 512 MB e no de 1 GB:
 `-XX:+UseSerialGC -XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError`, pelo `JAVA_TOOL_OPTIONS` da
-imagem. Ao lado deles vai `-XX:-UseBASE64Intrinsics`, que contém a falha CVE-2026-114938 do Java até a
-base da imagem trazer a versão corrigida. O porquê de cada valor está no próprio `Dockerfile`. Um
-`JAVA_TOOL_OPTIONS` definido no compose substitui o da imagem inteiro: repita os quatro valores e meça de
-novo com a carga.
+imagem. O porquê de cada valor está no próprio `Dockerfile`. Um `JAVA_TOOL_OPTIONS` definido no compose
+substitui o da imagem inteiro: repita os três valores e meça de novo com a carga.
 
 ## Avisos de segurança das dependências
 

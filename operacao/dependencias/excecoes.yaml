@@ -20,7 +20,8 @@
 vulnerabilities:
   # O proxy da VPS, o Caddy 2.11.9, traz o golang.org/x/net 0.60.0, cujo leitor de HTML entra pela
   # biblioteca de linha de comando da smallstep, que monta a ajuda dos comandos. A correção está na
-  # 0.62.0, e esta exceção sai com um build do proxy com a 0.62.0 ou mais nova.
+  # 0.62.0, e esta exceção sai com um build do proxy com a 0.62.0 ou mais nova. Até 2026-11-28 não
+  # tinha saído Caddy depois do 2.11.9.
   - id: CVE-2026-78661
     purls:
       - pkg:golang/golang.org/x/net@v0.60.0
@@ -29,12 +30,12 @@ vulnerabilities:
       por marcas de fim ignoradas. No proxy, o leitor de HTML só serve à ajuda dos comandos da linha de
       comando. Ao atender, o proxy limita o tamanho do corpo e encaminha a requisição à aplicação sem
       interpretar o conteúdo dela nem o da resposta, que ele no máximo comprime.
-    expired_at: 2026-12-01
+    expired_at: 2026-12-28
 
   # O mesmo Caddy 2.11.9 foi compilado com o Go 1.27.3. A correção está no Go 1.27.4 e no 1.26.11, e
-  # nenhuma versão do Caddy compilada com eles tinha saído quando o aviso apareceu. Esta exceção sai com
-  # a primeira imagem do proxy compilada com um Go corrigido, depois dos 7 dias de espera de toda troca
-  # de imagem.
+  # nenhuma versão do Caddy compilada com eles tinha saído quando o aviso apareceu, nem até 2026-11-28.
+  # Esta exceção sai com a primeira imagem do proxy compilada com um Go corrigido, depois dos 7 dias de
+  # espera de toda troca de imagem.
   - id: CVE-2026-97054
     purls:
       - pkg:golang/stdlib@v1.27.3
@@ -45,27 +46,19 @@ vulnerabilities:
       corpo. Esperar é aceitável porque o efeito é só a queda do processo, sem leitura nem escrita de
       dado; o contêiner do proxy reinicia sozinho em segundos, o vigia avisa a indisponibilidade, e
       o serviço ainda só tem Contas de teste.
-    expired_at: 2026-12-01
-
-  # A base da imagem da aplicação, o eclipse-temurin 21 sobre o Alpine 3.24.4, traz a libfontenc
-  # 1.1.9-r0, e a correção está na 1.1.10-r0. A base da mesma tag publicada em 2026-11-20 já a traz,
-  # junto com o Java 21.0.13.1, e entra depois de 7 dias publicada, como toda troca de base; esta
-  # exceção sai com ela.
-  - id: CVE-2026-109908
-    purls:
-      - pkg:apk/alpine/libfontenc@1.1.9-r0?arch=x86_64&distro=3.24.4
-    statement: >-
-      Estouro de buffer no heap ao ler um arquivo de codificação de fonte, para quem consegue pôr esse
-      arquivo na pasta de fontes de um servidor X. Na imagem da aplicação, só o mkfontscale liga a
-      biblioteca: ele indexa as fontes quando o pacote delas é instalado, no build, e nada o chama com
-      a imagem no ar. A JVM não usa a biblioteca, a imagem não tem servidor X, e a pasta das
-      codificações é do root, enquanto a aplicação roda com um usuário sem privilégio.
-    expired_at: 2026-12-01
+    expired_at: 2026-12-28
 
   # A base da imagem da cópia e da imagem do banco da VPS, o postgres 17.12 sobre o Alpine 3.24.4, traz
-  # a libxml2 2.13.9-r2, e a correção está na 2.13.9-r3. Nenhuma base da tag a trazia quando o aviso
-  # passou a ter correção, nem a de 2026-11-18; a exceção sai com a primeira que a traga, depois de 7
-  # dias publicada, trocada nos dois Dockerfiles juntos.
+  # a libxml2 2.13.9-r2. A correção dos sete avisos abaixo está na 2.13.9-r3, na r4 e na r5, e nenhuma
+  # base da tag trazia nenhuma delas até 2026-11-28, nem a de 2026-11-18, a mais nova. As exceções saem
+  # com a primeira base que traga a r5, depois de 7 dias publicada, trocada nos dois Dockerfiles juntos.
+  #
+  # Nas duas imagens, ligam a libxml2 o servidor do PostgreSQL, que a usa só nas funções de XML do SQL, a
+  # extensão xml2, a libxslt, a libexslt, o xsltproc e a libLLVM. O sistema não usa XML no banco: nenhuma
+  # migration nem consulta chama função de XML, e o banco só atende a aplicação, pela rede interna, com
+  # consultas parametrizadas. A libxslt e a libexslt só são carregadas pela extensão xml2, que não é
+  # criada no banco, e pelo xsltproc, que nenhum script das imagens chama. A libLLVM só usa a biblioteca
+  # para o manifesto de programa do Windows, que a compilação do PostgreSQL não monta.
   - id: CVE-2026-86144
     purls:
       - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
@@ -76,4 +69,56 @@ vulnerabilities:
       chamá-lo. A libxslt só é carregada pela extensão xml2, que não é criada no banco: nenhuma
       migration a cria, e só um superusuário poderia, enquanto o papel da aplicação não é superusuário.
       Nenhum script das imagens chama o xsltproc.
-    expired_at: 2026-12-01
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-11979
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Estouro de pilha no utilitário xmlcatalog, no modo de linha de comando interativo, com uma linha de
+      entrada longa. O utilitário não está nas imagens: a base traz só a biblioteca.
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-86138
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Estouro de inteiro e de buffer no heap no dicionário de nomes, ao ler um XML com nomes prefixados.
+      Nas imagens, só leem XML o servidor do PostgreSQL, nas funções de XML do SQL, que o sistema não
+      usa, e os programas que só carregam com a extensão xml2 ou com o xsltproc, que não são usados.
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-86139
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Estouro de inteiro ao escapar um endereço. Nas imagens, só a libxslt e a libexslt chamam a função,
+      e elas só são carregadas pela extensão xml2, que não é criada, e pelo xsltproc, que nada chama.
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-86140
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Estouro de pilha ao montar a mensagem de erro da validação de um XML contra a DTD dele. Só a leitura
+      de XML chega a ela, e nas imagens só leem XML o servidor do PostgreSQL, nas funções de XML do SQL,
+      que o sistema não usa, e os programas que só carregam com a extensão xml2 ou com o xsltproc.
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-86142
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Estouro de buffer no heap ao avaliar um XPointer longo. Nas imagens, só a libxslt chama o XPointer,
+      direto ou pelo XInclude, e ela só é carregada pela extensão xml2, que não é criada, e pelo xsltproc,
+      que nada chama.
+    expired_at: 2026-12-28
+
+  - id: CVE-2026-86143
+    purls:
+      - pkg:apk/alpine/libxml2@2.13.9-r2?arch=x86_64&distro=3.24.4
+    statement: >-
+      Um tamanho negativo pode chegar à função que grava a saída ao escrever um XML. Nas imagens, só
+      escrevem XML o servidor do PostgreSQL, nas funções de XML do SQL, que o sistema não usa, e a
+      libxslt, que só é carregada pela extensão xml2, que não é criada, e pelo xsltproc, que nada chama.
+    expired_at: 2026-12-28
