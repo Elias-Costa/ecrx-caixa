@@ -70,6 +70,30 @@ describe('estoque na tela', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('o código passado no leitor escolhe o produto, e o campo se esvazia a cada Enter, achado ou não', async () => {
+    const feijao: EstoqueDoProduto = { ...arroz, id: 'feijao', nome: 'Feijão', codigo: '7891000311004' }
+    vi.spyOn(estoque, 'produtos').mockResolvedValue([feijao, arroz])
+    vi.spyOn(estoque, 'baixo').mockResolvedValue([])
+    render(<TelaDeEstoque />)
+
+    const seletor = await screen.findByLabelText('Produto')
+    const codigo = screen.getByLabelText('Código de barras')
+    expect(seletor).toHaveValue('arroz')
+
+    fireEvent.change(codigo, { target: { value: '7899999999906' } })
+    fireEvent.keyDown(codigo, { key: 'Enter' })
+    expect(await screen.findByText('Nenhum produto da lista tem o código 7899999999906.')).toHaveAttribute('role', 'alert')
+    expect(codigo).toHaveValue('')
+    expect(seletor).toHaveValue('arroz')
+
+    fireEvent.change(codigo, { target: { value: ' 7891000311004 ' } })
+    fireEvent.keyDown(codigo, { key: 'Enter' })
+    await waitFor(() => expect(seletor).toHaveValue('feijao'))
+    expect(codigo).toHaveValue('')
+    expect(seletor).toHaveFocus()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('mostra o alerta e lança a diferença calculada de uma contagem', async () => {
     vi.spyOn(estoque, 'produtos').mockResolvedValue([arroz])
     vi.spyOn(estoque, 'baixo').mockResolvedValue([arroz])

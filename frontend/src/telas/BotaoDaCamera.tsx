@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { avisarLeitura, FalhaDaCamera, lerPelaCamera, prepararAviso, temCamera } from './leitorDeCodigo'
+import { avisarLeitura, cameraTraseira, FalhaDaCamera, lerPelaCamera, prepararAviso, temCamera } from './leitorDeCodigo'
+
+/**
+ * A câmera de notebook continua com o botão, mas costuma não ler o código de embalagem; sem o aviso, quem aponta o
+ * código para ela fica sem leitura e sem saber por quê.
+ */
+const AVISO_SEM_TRASEIRA = 'Esta câmera costuma não focar de perto e pode não ler o código. Um leitor de código de barras ou o aplicativo no celular leem melhor.'
 
 type Props = {
   /** Recebe o código lido depois de a janela fechar, com o foco de volta no botão. */
@@ -10,11 +16,10 @@ type Props = {
 /**
  * O botão que lê um código de barras pela câmera, uma leitura por toque: a câmera aberta leria de novo o mesmo
  * código parado na frente dela. Só aparece onde o navegador diz que há câmera, para o computador do balcão, que usa
- * o leitor USB, não ganhar um botão que não serve.
+ * o leitor de código de barras, não ganhar um botão que não serve.
  *
- * É um código de barras desenhado, colado no campo que ele preenche: dentro do campo de texto, à direita, como o
- * olho da senha, e ao lado da lista de produtos, que já tem a seta à direita. Sem texto à vista, o nome do botão
- * fica no aria-label.
+ * É um código de barras desenhado, dentro do campo do código, à direita, como o olho da senha. Sem texto à vista, o
+ * nome do botão fica no aria-label.
  */
 export function BotaoDaCamera({ aoLer, desligado }: Props) {
   const [comCamera, setComCamera] = useState(false)
@@ -69,6 +74,7 @@ function JanelaDaCamera({ aoFechar }: { aoFechar: (codigo: string | undefined) =
   const lido = useRef<string | undefined>(undefined)
   const titulo = useId()
   const [lendo, setLendo] = useState(false)
+  const [semTraseira, setSemTraseira] = useState(false)
   const [falha, setFalha] = useState<string>()
 
   useEffect(() => {
@@ -100,12 +106,15 @@ function JanelaDaCamera({ aoFechar }: { aoFechar: (codigo: string | undefined) =
 
   return <dialog ref={dialogo} className="camera" aria-labelledby={titulo} onClose={aoFecharDialogo}>
     <h2 id={titulo} className="camera__titulo">Ler código de barras</h2>
-    <video ref={video} className="camera__video" muted playsInline onPlaying={() => setLendo(true)} />
-    {/* Os dois parágrafos ficam montados, para o leitor de tela anunciar quando o texto muda; a caixa vermelha
-        só aparece com a falha. */}
+    <video ref={video} className="camera__video" muted playsInline
+      onPlaying={(evento) => { setLendo(true); setSemTraseira(!cameraTraseira(evento.currentTarget)) }} />
+    {/* Os três parágrafos ficam montados, para o leitor de tela anunciar quando o texto muda; a caixa vermelha
+        só aparece com a falha. O aviso da câmera sem foco de perto é região ao vivo sem o papel status, que já é
+        o do parágrafo de cima. */}
     <p className="camera__estado" role="status">
       {falha ? '' : lendo ? 'Aponte a câmera para o código de barras.' : 'Abrindo a câmera...'}
     </p>
+    <p className="camera__dica" aria-live="polite">{semTraseira && !falha ? AVISO_SEM_TRASEIRA : ''}</p>
     <p className={falha ? 'mensagem-erro' : undefined} role="alert">{falha ?? ''}</p>
     <div className="camera__acoes">
       <button ref={fecharRef} type="button" className="botao botao--secundario" onClick={() => dialogo.current?.close()}>

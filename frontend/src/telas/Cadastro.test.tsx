@@ -76,6 +76,23 @@ describe('cadastro na tela', () => {
     await waitFor(() => expect(editar).toHaveBeenCalledWith('item-1', expect.objectContaining({ codigo: '7891000311004' })))
   })
 
+  it('o Enter do leitor no campo do código passa à categoria, sem salvar', async () => {
+    vi.spyOn(cadastro, 'produtos').mockResolvedValue([produto])
+    const editar = vi.spyOn(cadastro, 'editarProduto').mockResolvedValue(undefined)
+    mostrarProdutos('ADMIN')
+
+    expect(await screen.findByText('Café')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    const codigo = screen.getByLabelText('Código (opcional)')
+    fireEvent.change(codigo, { target: { value: '7891000311004' } })
+
+    // O navegador só deixa de enviar o formulário pelo Enter quando o evento é cancelado; o jsdom não envia sozinho.
+    expect(fireEvent.keyDown(codigo, { key: 'Enter' })).toBe(false)
+    expect(screen.getByLabelText('Categoria (opcional)')).toHaveFocus()
+    expect(codigo).toHaveValue('7891000311004')
+    expect(editar).not.toHaveBeenCalled()
+  })
+
   it('avisa o nome repetido de outro item ativo sem impedir o salvar, e não acusa o próprio item', async () => {
     vi.spyOn(cadastro, 'produtos').mockResolvedValue([{ ...produto, nome: 'Pão de queijo', preco: 3.5 }])
     const criar = vi.spyOn(cadastro, 'criarProduto').mockResolvedValue({ id: 'item-2' })

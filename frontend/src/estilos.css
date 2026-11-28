@@ -210,18 +210,6 @@ textarea:disabled {
   width: 100%;
 }
 
-/* Lista com um botão quadrado ao lado, como a câmera junto da lista de produtos do estoque: dentro
-   da lista, o botão cairia em cima da seta dela. */
-.campo__com-botao {
-  display: flex;
-  gap: 8px;
-}
-
-.campo__com-botao .campo__entrada {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* A borda do campo que o servidor recusou acompanha a mensagem embaixo dele, que diz o porquê. */
 [aria-invalid='true'] {
   border-color: var(--cor-erro);
@@ -298,25 +286,6 @@ textarea:disabled {
 .campo__camera:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-/* Ao lado da lista, a câmera tem a borda dos campos, para não parecer solta no cartão, e a altura da
-   lista. */
-.campo__com-botao .campo__camera {
-  position: static;
-  flex: none;
-  height: auto;
-  min-height: var(--toque);
-  border: 1px solid var(--cor-borda-controle);
-  color: var(--cor-texto);
-}
-
-.campo__com-botao .campo__camera:hover {
-  background: var(--cor-superficie-realce);
-}
-
-.campo__com-botao .campo__camera:focus-visible {
-  outline-offset: 2px;
 }
 
 /* Campo de dinheiro: o R$ fica dentro da caixa, à esquerda, e o toque nele cai no próprio campo. */
@@ -455,6 +424,18 @@ textarea:disabled {
 
 .camera__estado {
   margin: 12px 0 0;
+}
+
+/* O aviso da câmera de notebook fica sempre montado, para o leitor de tela anunciar, e só ganha espaço
+   quando tem texto. Texto secundário sobre a janela: 6,78:1. */
+.camera__dica {
+  margin: 0;
+  color: var(--cor-texto-secundario);
+  font-size: 0.9rem;
+}
+
+.camera__dica:not(:empty) {
+  margin-top: 8px;
 }
 
 .camera__acoes {
@@ -1054,6 +1035,7 @@ main.cadastro {
 .estoque .tabela { max-width: 44rem; }
 .estoque .tabela th, .estoque .tabela td { vertical-align: middle; }
 .estoque__selecao { display: grid; gap: 8px; max-width: 420px; }
+.estoque__codigo { margin-top: 12px; }
 .estoque__formularios { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--espaco); }
 .estoque__formularios form, .estoque__formularios label { display: grid; gap: 8px; align-content: start; }
 .estoque__formularios form { padding: var(--espaco); background: var(--cor-superficie); border: 1px solid var(--cor-borda); border-radius: var(--raio); }

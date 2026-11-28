@@ -1,7 +1,7 @@
 import { ZXING_WASM_VERSION as versaoDaBiblioteca } from 'barcode-detector/ponyfill'
 import { ZXING_WASM_VERSION as versaoDoLeitorServido } from 'zxing-wasm/reader'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { avisarLeitura, FORMATOS, lerPelaCamera, temCamera } from './leitorDeCodigo'
+import { avisarLeitura, cameraTraseira, FORMATOS, lerPelaCamera, temCamera } from './leitorDeCodigo'
 
 // O leitor em WebAssembly não roda no jsdom: a biblioteca fica com a versão de verdade e um detector que não lê nada.
 vi.mock('barcode-detector/ponyfill', async (original) => ({
@@ -55,6 +55,22 @@ describe('leitor de código pela câmera', () => {
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     })
+  })
+
+  it('só a câmera que diz apontar para trás conta como traseira', () => {
+    const video = document.createElement('video')
+    const comCamera = (facingMode?: string) => Object.defineProperty(video, 'srcObject', {
+      value: { getVideoTracks: () => [{ getSettings: () => ({ facingMode }) }] }, configurable: true,
+    })
+
+    comCamera('environment')
+    expect(cameraTraseira(video)).toBe(true)
+    comCamera('user')
+    expect(cameraTraseira(video)).toBe(false)
+    comCamera(undefined)
+    expect(cameraTraseira(video)).toBe(false)
+    Object.defineProperty(video, 'srcObject', { value: null, configurable: true })
+    expect(cameraTraseira(video)).toBe(false)
   })
 
   it('a leitura feita vibra por 100 ms onde o navegador deixa vibrar', () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { SemConexao } from '../api/cliente'
 import { estoque, type EstoqueDoProduto } from '../api/estoque'
 import { quantidade, quantidadeComUnidade } from '../formatos'
@@ -44,6 +44,7 @@ export function TelaDeEstoque() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [codigoDigitado, setCodigoDigitado] = useState('')
   const [codigoSemProduto, setCodigoSemProduto] = useState<string | null>(null)
   /**
    * O id do movimento que ficou sem resposta. A resposta perdida pode ter gravado, e o toque igual
@@ -88,12 +89,27 @@ export function TelaDeEstoque() {
     setCodigoSemProduto(null)
   }
 
-  /** O código lido escolhe o produto como o toque na lista, e a frase fica junto do seletor, onde se olhou. */
-  function lerCodigoDaCamera(codigo: string) {
+  /**
+   * O código digitado, passado no leitor ou lido pela câmera escolhe o produto como o toque na lista, e a frase fica
+   * junto do campo do código, onde se olhou.
+   */
+  function escolherPeloCodigo(codigo: string) {
     const lido = codigo.trim()
     const achado = produtos.find((item) => item.codigo === lido)
     if (achado) escolher(achado.id)
     else setCodigoSemProduto(`Nenhum produto da lista tem o código ${lido}.`)
+  }
+
+  /**
+   * O leitor de código de barras digita o código e aperta Enter. O campo se esvazia a cada Enter, achado ou não, para
+   * a leitura seguinte não colar no fim da anterior.
+   */
+  function enterNoCodigo(evento: KeyboardEvent<HTMLInputElement>) {
+    if (evento.key !== 'Enter') return
+    evento.preventDefault()
+    const lido = codigoDigitado.trim()
+    setCodigoDigitado('')
+    if (lido) escolherPeloCodigo(lido)
   }
 
   /**
@@ -240,15 +256,21 @@ export function TelaDeEstoque() {
       <section className="relatorios__cartao" ref={formulariosRef}>
         <h3>Produtos</h3>
         {produtos.length === 0 ? <p>Nenhum produto ativo. Cadastre um produto para controlar o estoque.</p> : <>
-          {/* O botão da câmera fica ao lado da lista e fora do rótulo, para o nome da lista continuar sendo só o
-              rótulo. */}
           <div className="estoque__selecao">
             <label htmlFor="estoque-produto">Produto</label>
-            <div className="campo__com-botao">
-              <select ref={seletorRef} id="estoque-produto" className="campo__entrada" value={produtoId} onChange={(evento) => trocarProduto(evento.target.value)}>
-                {produtos.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.codigo ? ` · ${item.codigo}` : ''}</option>)}
-              </select>
-              <BotaoDaCamera aoLer={lerCodigoDaCamera} />
+            <select ref={seletorRef} id="estoque-produto" className="campo__entrada" value={produtoId} onChange={(evento) => trocarProduto(evento.target.value)}>
+              {produtos.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.codigo ? ` · ${item.codigo}` : ''}</option>)}
+            </select>
+          </div>
+          {/* A lista não procura pelo código: o leitor e a câmera escolhem o produto por este campo. O botão da câmera
+              fica dentro dele e fora do rótulo, para o nome do campo continuar sendo só o rótulo. */}
+          <div className="estoque__selecao estoque__codigo">
+            <label htmlFor="estoque-codigo">Código de barras</label>
+            <div className="campo__leitura">
+              <input id="estoque-codigo" className="campo__entrada" value={codigoDigitado} autoComplete="off"
+                enterKeyHint="search" placeholder="Digite ou passe o código"
+                onChange={(evento) => setCodigoDigitado(evento.target.value)} onKeyDown={enterNoCodigo} />
+              <BotaoDaCamera aoLer={escolherPeloCodigo} />
             </div>
           </div>
           <Mensagem tipo="erro" texto={codigoSemProduto} />

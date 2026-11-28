@@ -1,20 +1,24 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BotaoDaCamera } from './BotaoDaCamera'
-import { avisarLeitura, FalhaDaCamera, lerPelaCamera, prepararAviso, temCamera } from './leitorDeCodigo'
+import { avisarLeitura, cameraTraseira, FalhaDaCamera, lerPelaCamera, prepararAviso, temCamera } from './leitorDeCodigo'
 
 // O jsdom não tem câmera nem WebAssembly: a leitura é simulada, e o que se prova é a janela.
 vi.mock('./leitorDeCodigo', async (original) => ({
   ...(await original<typeof import('./leitorDeCodigo')>()),
   temCamera: vi.fn(),
   lerPelaCamera: vi.fn(),
+  cameraTraseira: vi.fn(),
   prepararAviso: vi.fn(),
   avisarLeitura: vi.fn(),
 }))
 
+const AVISO = 'Esta câmera costuma não focar de perto e pode não ler o código. Um leitor de código de barras ou o aplicativo no celular leem melhor.'
+
 beforeEach(() => {
   vi.mocked(temCamera).mockReset().mockResolvedValue(true)
   vi.mocked(lerPelaCamera).mockReset()
+  vi.mocked(cameraTraseira).mockReset().mockReturnValue(true)
   vi.mocked(prepararAviso).mockReset()
   vi.mocked(avisarLeitura).mockReset()
 })
@@ -60,6 +64,33 @@ describe('botão da câmera', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(botao).toHaveFocus()
     expect(leitura.sinal()?.aborted).toBe(true)
+  })
+
+  it('com a câmera traseira já mostrando a imagem, a janela pede para apontar, sem aviso', async () => {
+    leituraPendente()
+    render(<BotaoDaCamera aoLer={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Ler código de barras' })
+    fireEvent.playing(dialogo.querySelector('video') as HTMLVideoElement)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Aponte a câmera para o código de barras.')
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument()
+  })
+
+  it('com uma câmera que não é a traseira, como a do notebook, a janela avisa que ela pode não ler', async () => {
+    vi.mocked(cameraTraseira).mockReturnValue(false)
+    leituraPendente()
+    render(<BotaoDaCamera aoLer={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ler pela câmera' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Ler código de barras' })
+    const video = dialogo.querySelector('video') as HTMLVideoElement
+    fireEvent.playing(video)
+
+    expect(cameraTraseira).toHaveBeenCalledWith(video)
+    expect(screen.getByRole('status')).toHaveTextContent('Aponte a câmera para o código de barras.')
+    expect(screen.getByText(AVISO)).toHaveAttribute('aria-live', 'polite')
   })
 
   it('a câmera recusada mostra a frase da permissão e não entrega nada', async () => {
