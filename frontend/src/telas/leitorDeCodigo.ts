@@ -129,6 +129,17 @@ export async function lerPelaCamera(video: HTMLVideoElement, sinal: AbortSignal)
   }
 }
 
+/**
+ * Se o vídeo vem da câmera traseira, a que celular e tablet têm com foco automático. A de notebook, que aponta para a
+ * pessoa e tem foco fixo, só vê nítido de longe, onde o código de barras comum fica pequeno demais: de perto, as
+ * barras finas se fundem. A câmera que não diz para onde aponta, como a webcam ligada por USB, conta como não traseira.
+ */
+export function cameraTraseira(video: HTMLVideoElement): boolean {
+  const fluxo = video.srcObject
+  if (!fluxo || !('getVideoTracks' in fluxo)) return false
+  return fluxo.getVideoTracks()[0]?.getSettings().facingMode === 'environment'
+}
+
 let somDoAviso: AudioContext | undefined
 
 /**

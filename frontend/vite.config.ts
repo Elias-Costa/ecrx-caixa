@@ -63,5 +63,9 @@ export default defineConfig({
     setupFiles: ['./src/setupCanal.ts', './src/setupTests.ts'],
     // O Vitest esvazia o CSS importado; o teste do alvo de toque lê as regras deste arquivo.
     css: { include: [/estilos\.css/] },
+    // Cada espera da Testing Library vai até 3 s (setupTests.ts), e um teste com duas esperas lentas sob
+    // carga, como no build da imagem, passava dos 5 s padrão sem estar preso. Com 15 s, a espera que não
+    // chega estoura antes e mostra a linha em que parou; o limite do teste só pega o que travou de vez.
+    testTimeout: 15000,
   },
 })

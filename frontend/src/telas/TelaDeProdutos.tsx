@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { cadastro, type DadosDoProduto, type Produto, type TipoProduto } from '../api/cadastro'
 import { comServidor } from '../api/conexao'
 import { contagem, lerDinheiro, moeda, valorNoCampo } from '../formatos'
@@ -149,6 +149,7 @@ export function TelaDeProdutos() {
   const [pendentes, setPendentes] = useState(0)
   const formularioRef = useRef<HTMLFormElement>(null)
   const codigoRef = useRef<HTMLInputElement>(null)
+  const categoriaRef = useRef<HTMLInputElement>(null)
   const [confirmar, dialogoDeConfirmacao] = useConfirmacao()
 
   const carregar = useCallback(async () => {
@@ -225,6 +226,16 @@ export function TelaDeProdutos() {
   function lerCodigoDaCamera(codigo: string) {
     campo('codigo', codigo.trim())
     codigoRef.current?.focus()
+  }
+
+  /**
+   * O leitor de código de barras digita o código e aperta Enter, e o Enter num campo salva o formulário: o item
+   * seria gravado antes da categoria e da unidade. No campo do código, o Enter passa ao campo seguinte.
+   */
+  function enterNoCodigo(evento: KeyboardEvent<HTMLInputElement>) {
+    if (evento.key !== 'Enter') return
+    evento.preventDefault()
+    categoriaRef.current?.focus()
   }
 
   function mudarAtributo(indice: number, campo: 'chave' | 'valor', valor: string) {
@@ -385,10 +396,10 @@ export function TelaDeProdutos() {
             <span id="produto-aviso-nome" className="campo__aviso" role="status">{nomeRepetido ? 'Já existe um item ativo com este nome. Na busca do balcão, os dois aparecem iguais.' : ''}</span></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-preco">Preço (R$)</label><input id="produto-preco" className="campo__entrada" value={formulario.preco} onChange={(evento) => campo('preco', evento.target.value)} inputMode="decimal" required {...marcaDoCampo('preco')} /><ErroDoCampo id="produto-erro-preco" texto={camposComErro.preco} /></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-codigo">Código (opcional)</label>
-            <div className="campo__leitura"><input ref={codigoRef} id="produto-codigo" className="campo__entrada" value={formulario.codigo} onChange={(evento) => campo('codigo', evento.target.value)} maxLength={60} {...marcaDoCampo('codigo')} />
+            <div className="campo__leitura"><input ref={codigoRef} id="produto-codigo" className="campo__entrada" value={formulario.codigo} onChange={(evento) => campo('codigo', evento.target.value)} maxLength={60} onKeyDown={enterNoCodigo} {...marcaDoCampo('codigo')} />
               <BotaoDaCamera aoLer={lerCodigoDaCamera} /></div>
             <ErroDoCampo id="produto-erro-codigo" texto={camposComErro.codigo} /></div>
-          <div className="campo"><label className="campo__rotulo" htmlFor="produto-categoria">Categoria (opcional)</label><input id="produto-categoria" className="campo__entrada" value={formulario.categoria} onChange={(evento) => campo('categoria', evento.target.value)} maxLength={60} {...marcaDoCampo('categoria')} /><ErroDoCampo id="produto-erro-categoria" texto={camposComErro.categoria} /></div>
+          <div className="campo"><label className="campo__rotulo" htmlFor="produto-categoria">Categoria (opcional)</label><input ref={categoriaRef} id="produto-categoria" className="campo__entrada" value={formulario.categoria} onChange={(evento) => campo('categoria', evento.target.value)} maxLength={60} {...marcaDoCampo('categoria')} /><ErroDoCampo id="produto-erro-categoria" texto={camposComErro.categoria} /></div>
           <div className="campo"><label className="campo__rotulo" htmlFor="produto-unidade">Unidade (opcional)</label><input id="produto-unidade" className="campo__entrada" value={formulario.unidade} onChange={(evento) => campo('unidade', evento.target.value)} maxLength={60} {...marcaDoCampo('unidade')} /><ErroDoCampo id="produto-erro-unidade" texto={camposComErro.unidade} /></div>
         </div>
         <fieldset className="cadastro__atributos"><legend>Atributos do item (opcional)</legend>
